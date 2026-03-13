@@ -18,5 +18,6 @@ clustering.ipynb
 buildup_metrics.csv
 secrets.toml
 /raw data/
-# Ignore all Parquet files
+# Ignore all Parquet files and the dynamic_events_pl_24 directory
 *.parquet
+data/dynamic_events_pl_24/
