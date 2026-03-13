@@ -12,8 +12,11 @@ share/*
 .vscode/*
 twelve_chat.bat
 .env
+*.env
 user_info.json
 clustering.ipynb
 buildup_metrics.csv
 secrets.toml
-
+/raw data/
+# Ignore all Parquet files
+*.parquet
