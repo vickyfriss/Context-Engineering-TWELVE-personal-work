@@ -2,8 +2,8 @@ import pandas as pd
 from pathlib import Path
 from collections import defaultdict
 
-DYNAMIC_DIR = Path("dynamic_events_pl_24/dynamic")
-OUTPUT_PATH = Path("buildup_metrics.csv")
+DYNAMIC_DIR = Path("../data/dynamic_events_pl_24/dynamic")
+OUTPUT_PATH = Path("../data/team_build_up_analyst/buildup_metrics.csv")
 
 # 10 FPS → 7 seconds = 70 frames
 SEVEN_SECONDS_FRAMES = 70
