@@ -8,7 +8,7 @@ from openai import OpenAI
 
 import utils.sentences as sentences
 from utils.gemini import convert_messages_format
-from classes.data_point import Player, Country, Person
+from classes.data_point import Player, Country, Person, Team
 from classes.data_source import PersonStat
 
 import json
@@ -710,3 +710,63 @@ class PersonDescription(Description):
         )
         return [{"role": "user", "content": prompt}]
     
+class TeamDescription(Description):
+    output_token_limit = 180
+
+    @property
+    def gpt_examples_path(self):
+        return f"{self.gpt_examples_base}/team_buildup.xlsx"
+
+    @property
+    def describe_paths(self):
+        return [f"{self.describe_base}/team_buildup.xlsx"]
+
+    def __init__(self, team: Team):
+        self.team = team
+        super().__init__()
+
+    def get_intro_messages(self) -> List[Dict[str, str]]:
+        intro = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a football build-up analyst. "
+                    "You provide succinct, data-grounded explanations about how teams build up play. "
+                    "You must base your answers only on the data description and the provided Q/A context."
+                ),
+            },
+        ]
+        if len(self.describe_paths) > 0:
+            intro += [
+                {"role": "user", "content": "First, could you answer some questions about the build-up metrics for me?"},
+                {"role": "assistant", "content": "Sure!"},
+            ]
+        return intro
+
+    def synthesize_text(self) -> str:
+        team = self.team
+        metrics = team.relevant_metrics
+
+        description = (
+            f"Here is a statistical description of {team.name} across the tournament, "
+            f"based on {team.minutes_played} minutes.\n\n"
+        )
+
+        for metric in metrics:
+            description += (
+                f"{team.name} was "
+                f"{sentences.describe_level(team.ser_metrics[metric + '_Z'])} "
+                f"in {sentences.write_out_metric(metric)} compared to other teams in the dataset. "
+            )
+
+        return description
+
+    def get_prompt_messages(self) -> List[Dict[str, str]]:
+        prompt = (
+            "Please use the statistical description enclosed with ``` to give a concise, 4 sentence summary of the team's build-up style. "
+            "Sentence 1: overall style. "
+            "Sentence 2: key strengths based on the metrics. "
+            "Sentence 3: weaknesses or average areas based on the metrics. "
+            "Sentence 4: a clear comparison to other teams in the dataset."
+        )
+        return [{"role": "user", "content": prompt}]

@@ -142,3 +142,22 @@ class PersonEmbeddings(Embeddings):
 
         return df_embeddings
 
+class TeamEmbeddings(Embeddings):
+    def __init__(self):
+        self.df_dict = TeamEmbeddings.get_embeddings()
+
+    def get_embeddings():
+        files = ["team_buildup"]
+
+        df_embeddings = pd.DataFrame()
+        for file in files:
+            df_temp = pd.read_parquet(f"data/embeddings/{file}.parquet")
+            if "category" not in df_temp:
+                df_temp["category"] = None
+            if "format" not in df_temp:
+                df_temp["format"] = None
+            df_temp = df_temp[["user", "assistant", "category", "user_embedded", "format"]]
+            df_temp["user_embedded"] = df_temp.user_embedded.apply(eval).to_list()
+            df_embeddings = pd.concat([df_embeddings, df_temp], ignore_index=True)
+
+        return df_embeddings

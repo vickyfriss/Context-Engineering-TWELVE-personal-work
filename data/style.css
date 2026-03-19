@@ -163,9 +163,8 @@ button[data-testid="StyledFullScreenButton"]:hover {
 button[data-testid="StyledFullScreenButton"]>svg {
     opacity: 1;
 }
-
 div[data-testid="stForm"] {
-    background-color: #002c1c;
+    background-color: transparent;
 }
 
 div[data-testid="stChatInput"]>div {
@@ -254,4 +253,21 @@ button[data-testid="baseButton-primary"] {
     background-color: white;
     border-color: darkgrey;
     left: 3.2rem;
+}
+
+div[data-testid="stChatInput"] {
+    background-color: transparent !important;
+}
+
+div[data-testid="stChatInput"] > div {
+    background-color: white !important;
+}
+
+div[data-testid="stChatInput"] textarea {
+    background-color: white !important;
+    color: black !important;
+}
+
+div[data-testid="stChatInput"] textarea::placeholder {
+    color: #666666 !important;
 }

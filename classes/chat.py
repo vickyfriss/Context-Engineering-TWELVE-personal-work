@@ -4,6 +4,8 @@ from itertools import groupby
 from types import GeneratorType
 import pandas as pd
 import json
+from classes.description import TeamDescription
+from classes.embeddings import TeamEmbeddings
 
 from settings import USE_GEMINI
 if USE_GEMINI:
@@ -459,3 +461,52 @@ class PersonChat(Chat):
                 )
 
             self.handle_input(x, stream=True)
+
+class TeamChat(Chat):
+    def __init__(self, chat_state_hash, team, teams, state="empty"):
+        self.embeddings = TeamEmbeddings()
+        self.team = team
+        self.teams = teams
+        super().__init__(chat_state_hash, state=state)
+
+    def get_input(self):
+        if x := st.chat_input(
+            placeholder=f"What else would you like to know about {self.team.name}'s build-up?"
+        ):
+            if len(x) > 500:
+                st.error(f"Your message is too long ({len(x)} characters). Please keep it under 500 characters.")
+            self.handle_input(x, stream=True)
+
+    def instruction_messages(self):
+        first_messages = [
+            {"role": "system", "content": "You are a football build-up analyst."},
+            {
+                "role": "user",
+                "content": (
+                    "After these messages you will be interacting with a user of a football analysis platform. "
+                    f"The user has selected the team {self.team.name}. "
+                    "All user messages will be prefixed with 'User:' and enclosed with ```. "
+                    "When responding to the user, speak directly to them. "
+                    "Use the information provided before the query to provide 2 sentence answers. "
+                    "Do not deviate from this information or add external facts."
+                ),
+            },
+        ]
+        return first_messages
+
+    def get_relevant_info(self, query):
+        ret_val = "Here is a description of the team in terms of data:\n\n"
+        description = TeamDescription(self.team)
+        ret_val += description.synthesize_text()
+
+        results = self.embeddings.search(query, top_n=5)
+        ret_val += "\n\nHere is relevant information for answering the question:\n"
+        ret_val += "\n".join(results["assistant"].to_list())
+
+        ret_val += "\n\nIf none of this is relevant, remind the user:\n"
+        ret_val += (
+            "This chat answers questions about a team's build-up metrics and what they imply about build-up style. "
+            "The user can select the team from the menu on the left."
+        )
+
+        return ret_val

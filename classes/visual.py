@@ -145,7 +145,8 @@ class Visual:
             self.fig,
             config={"displayModeBar": False},
             height=500,
-            use_container_width=True,
+            width="content",
+            key=f"plotly_{id(self)}"
         )
 
     def close(self):
