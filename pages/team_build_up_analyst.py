@@ -132,7 +132,7 @@ if chat.state == "empty":
 
     # Add to chat
     chat.add_message(
-        f"Please can you summarise {team.name}'s build-up style for me?",
+        f"Please can you summarise {team.name}'s build-up for me?",
         role="user",
         user_only=False,
         visible=False,
