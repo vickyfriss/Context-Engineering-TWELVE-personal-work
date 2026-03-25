@@ -713,16 +713,6 @@ class PersonDescription(Description):
 class TeamDescription(Description):
     output_token_limit = 180
 
-    METRIC_MEANINGS = {
-        "buildup_that_ends_with_finish_pct": "the percentage of build-ups that result in a shot on goal",
-        "turnover_pct_buildup": "the percentage of build-ups that end in your team losing possession",
-        "opp_box_entries_within_7s_after_turnover": "the frequency opponents enter your penalty area within 7 seconds of a turnover",
-        "opp_shot_probability_within_7s_after_turnover": "the likelihood that opponents take a shot within 7 seconds after a turnover",
-        "first_line_break_pct_buildup": "how often your team breaks the first defensive line during build-up",
-        "buildup_to_create_pct": "the proportion of build-ups that aim to create scoring opportunities",
-        "buildup_to_direct_pct": "the proportion of build-ups that progress the ball quickly in a direct manner",
-    }
-
     @property
     def gpt_examples_path(self):
         return f"{self.gpt_examples_base}/team_buildup.xlsx"
@@ -748,16 +738,29 @@ class TeamDescription(Description):
         ]
         if len(self.describe_paths) > 0:
             intro += [
-                {"role": "user", "content": "First, could you answer some questions about the build-up metrics for me?"},
+                {
+                    "role": "user",
+                    "content": "First, could you answer some questions about the build-up metrics for me?",
+                },
                 {"role": "assistant", "content": "Sure!"},
             ]
         return intro
 
+    def write_out_team_metric(self, metric: str) -> str:
+        metric_map = {
+            "buildup_to_create_pct": "build-ups that progress into midfield without using a direct long ball",
+            "buildup_to_direct_pct": "direct build-up progression",
+            "buildup_that_ends_with_finish_pct": "build-ups that progress into a finish phase",
+            "turnover_pct_buildup": "avoiding turnovers during build-up",
+            "opp_box_entries_within_7s_after_turnover": "limiting opposition box entries shortly after turnovers",
+            "opp_shot_probability_within_7s_after_turnover": "limiting opposition shot probability shortly after turnovers",
+            "first_line_break_pct_buildup": "breaking the first defensive line during build-up",
+        }
+        return metric_map.get(metric, metric.replace("_", " "))
+
     def synthesize_text(self):
         team = self.team
-        metrics = team.relevant_metrics
-
-        description = f"{team.name} build-up profile:\n\n"
+        metrics = self.team.relevant_metrics
 
         style_metrics = [
             "buildup_to_create_pct",
@@ -772,50 +775,36 @@ class TeamDescription(Description):
             "first_line_break_pct_buildup",
         ]
 
-        total_teams = getattr(team, "n_teams", 100)
+        description = (
+            f"Here is a statistical description of {team.name}'s build-up play. "
+            f"The team is compared to other teams in the dataset. \n\n"
+        )
 
-        def rank_to_percentile(rank):
-            try:
-                return int((1 - (rank - 1) / total_teams) * 100)
-            except:
-                return 50
+        metric_groups = {
+            "style": [metric for metric in metrics if metric in style_metrics],
+            "quality": [metric for metric in metrics if metric in quality_metrics],
+        }
 
-        # ----------------------- STYLE ----------------
-        description += "STYLE:\n"
-        for metric in metrics:
-            if metric in style_metrics:
-                rank = team.ser_metrics.get(metric + "_rank", None)
-                pct = rank_to_percentile(rank) if rank else 50
-                explanation = self.METRIC_MEANINGS.get(metric, "")
-                clean_name = metric.replace("_", " ").replace(" pct", "")
-                description += f"- {clean_name} (%): {pct}th percentile. {explanation}\n"
+        for group_name, group_metrics in metric_groups.items():
+            for metric in group_metrics:
+                z_value = team.ser_metrics[metric + "_Z"]
 
-        # ----------------------- QUALITY ----------------
-        description += "\nQUALITY:\n"
-        lower_is_better = [
-            "turnover_pct_buildup",
-            "opp_box_entries_within_7s_after_turnover",
-            "opp_shot_probability_within_7s_after_turnover",
-        ]
-
-        for metric in metrics:
-            if metric in quality_metrics:
-                rank = team.ser_metrics.get(metric + "_rank", None)
-                pct = rank_to_percentile(rank) if rank else 50
-                direction = "lower is better" if metric in lower_is_better else "higher is better"
-                explanation = self.METRIC_MEANINGS.get(metric, "")
-                clean_name = metric.replace("_", " ").replace(" pct", "")
-                description += f"- {clean_name} (%): {pct}th percentile ({direction}). {explanation}\n"
+                description += f"{team.name} was "
+                description += sentences.describe_level(z_value)
+                description += " in " + self.write_out_team_metric(metric)
+                description += " compared to other teams in the dataset. "
 
         return description
 
     def get_prompt_messages(self) -> List[Dict[str, str]]:
         prompt = (
-            "Please use the statistical description enclosed with ``` to give a concise, 4 sentence summary of the team's build-up style. Just sentences, no bullets. "
+            "Please use the statistical description enclosed with ``` to give a concise, 4 sentence summary of the team's build-up performance. Just sentences, no bullets. "
             "Use only the information given in the description to answer, do not make assumptions or add any information. Use only the metrics I gave you and no others. "
-            "Sentence 1: overall style. "
-            "Sentence 2: key strengths based on the metrics. "
+            "Sentence 1: overall performance in the build-up quality performance-metrics. "
+            "Sentence 2: key strengths based on the build-up quality perofmrnace metrics. "
             "Sentence 3: weaknesses or average areas based on the metrics. "
-            "Sentence 4: a clear comparison to other teams in the dataset."
+            "Sentence 4: a clear comparison with build-up performance-metrics to other teams."
         )
         return [{"role": "user", "content": prompt}]
+
+
