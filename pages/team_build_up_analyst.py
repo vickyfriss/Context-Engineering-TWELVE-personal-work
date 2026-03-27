@@ -49,11 +49,11 @@ style_metrics = [
 ]
 
 quality_metrics = [
+    "first_line_break_pct_buildup",
     "buildup_that_ends_with_finish_pct",
     "turnover_pct_buildup",
     "opp_box_entries_within_7s_after_turnover",
     "opp_shot_probability_within_7s_after_turnover",
-    "first_line_break_pct_buildup",
 ]
 
 # Metrics where lower values are better

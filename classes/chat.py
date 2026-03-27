@@ -554,12 +554,12 @@ class TeamChat(Chat):
     def get_team_description(self, team):
         desc = f"{team.name}. "
 
-        # Style metrics
-        desc += "Style: "
-        for m in self.STYLE_METRICS:
-            value = team.ser_metrics.get(m + "_rank", None)
-            if value is not None:
-                desc += f"{clean_metric_name(m)} is ranked {round(value, 2)}. "
+#        # Style metrics
+#        desc += "Style: "
+#        for m in self.STYLE_METRICS:
+#            value = team.ser_metrics.get(m + "_rank", None)
+#            if value is not None:
+#                desc += f"{clean_metric_name(m)} is ranked {round(value, 2)}. "
 
         # Quality metrics
         desc += "Quality: "
@@ -634,14 +634,14 @@ class TeamChat(Chat):
 
                     text += f"{clean_metric_name(m)} is {perf}. "
 
-        # ---------------- STYLE ----------------
-        elif self.is_style_query(query):
-            text = f"{self.team.name} style metrics. "
-            for m in self.STYLE_METRICS:
-                value = self.team.ser_metrics.get(m + "_rank", None)
-                if value is not None:
-                    text += f"{clean_metric_name(m)} is ranked {round(value, 2)}. "
-            return text
+#        # ---------------- STYLE ----------------
+#        elif self.is_style_query(query):
+#            text = f"{self.team.name} style metrics. "
+#            for m in self.STYLE_METRICS:
+#                value = self.team.ser_metrics.get(m + "_rank", None)
+#                if value is not None:
+#                    text += f"{clean_metric_name(m)} is ranked {round(value, 2)}. "
+#            return text
 
         # ---------------- DEFAULT ----------------
         else:
