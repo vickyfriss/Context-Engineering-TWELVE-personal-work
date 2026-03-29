@@ -748,13 +748,14 @@ class TeamDescription(Description):
 
     def write_out_team_metric(self, metric: str) -> str:
         metric_map = {
-            "buildup_to_create_pct": "build-ups that progress into midfield without using a direct long ball",
-            "buildup_to_direct_pct": "direct build-up progression",
+            #"buildup_to_create_pct": "build-ups that progress into midfield without using a direct long ball",
+            #"buildup_to_direct_pct": "direct build-up progression",
+            "first_line_break_pct_buildup": "breaking the first defensive line during build-up",
             "buildup_that_ends_with_finish_pct": "build-ups that progress into a finish phase",
             "turnover_pct_buildup": "avoiding turnovers during build-up",
             "opp_box_entries_within_7s_after_turnover": "limiting opposition box entries shortly after turnovers",
             "opp_shot_probability_within_7s_after_turnover": "limiting opposition shot probability shortly after turnovers",
-            "first_line_break_pct_buildup": "breaking the first defensive line during build-up",
+            
         }
         return metric_map.get(metric, metric.replace("_", " "))
 
@@ -768,11 +769,12 @@ class TeamDescription(Description):
         ]
 
         quality_metrics = [
+            "first_line_break_pct_buildup",
             "buildup_that_ends_with_finish_pct",
             "turnover_pct_buildup",
             "opp_box_entries_within_7s_after_turnover",
             "opp_shot_probability_within_7s_after_turnover",
-            "first_line_break_pct_buildup",
+
         ]
 
         description = (
@@ -798,13 +800,14 @@ class TeamDescription(Description):
 
     def get_prompt_messages(self) -> List[Dict[str, str]]:
         prompt = (
-            "Please use the statistical description enclosed with ``` to give a concise, 4 sentence summary of the team's build-up performance. Just sentences, no bullets. "
+            "Please use the statistical description enclosed with ``` to give a concise, 4 sentence summary of the team's build-up performance, strengths and weaknesses. The first sentence should use varied language to give an overview of the player." 
+            "The second sentence should describe the team's specific strengths based on the build-up performance metrics." 
+            "The third sentence should describe aspects in which the team is average and/or weak based on the metrics." 
+            "Finally, summarise exactly how the team's build-up performance compares to other teams based on the build-up performance-metrics."
             "Use only the information given in the description to answer, do not make assumptions or add any information. Use only the metrics I gave you and no others. "
-            "Sentence 1: overall performance in the build-up quality performance-metrics. "
-            "Sentence 2: key strengths based on the build-up quality perofmrnace metrics. "
-            "Sentence 3: weaknesses or average areas based on the metrics. "
-            "Sentence 4: a clear comparison with build-up performance-metrics to other teams."
+            #"Sentence 1: overall performance in the build-up quality performance-metrics. "
+            #"Sentence 2: key strengths based on the build-up quality perofmrnace metrics. "
+            #Sentence 3: weaknesses or average areas based on the metrics. "
+            #"Sentence 4: a clear comparison with build-up performance-metrics to other teams."
         )
         return [{"role": "user", "content": prompt}]
-
-

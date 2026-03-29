@@ -25,7 +25,7 @@ sidebar_container = st.sidebar.container()
 st.divider()
 
 st.title("Team Build-Up Analyst")
-st.write("Team build-up profiling using tournament-level metrics.")
+st.write("Team build-up analyst measuring teams performance in their build-up play. Performance is related to ball progression, turnover and opposition chances during build-up.")
 
 # -------------------------------
 # Metrics
@@ -33,8 +33,8 @@ st.write("Team build-up profiling using tournament-level metrics.")
 
 # All metrics
 metrics = [
-    "buildup_to_create_pct",
-    "buildup_to_direct_pct",
+    #"buildup_to_create_pct",
+    #"buildup_to_direct_pct",
     "buildup_that_ends_with_finish_pct",
     "turnover_pct_buildup",
     "opp_box_entries_within_7s_after_turnover",
@@ -153,61 +153,63 @@ chat.save_state()
 # -------------------------------
 # Correlation matrix (MOVED HERE)
 # -------------------------------
-st.subheader("Correlation Matrix")
+show_correlation_matrix = False
 
-corr_df = teams.df[metrics].corr(method="pearson")
+if show_correlation_matrix:
+    st.subheader("Correlation Matrix")
 
-cmap = LinearSegmentedColormap.from_list(
-    "red_white_green",
-    ["#d73027", "#ffffff", "#1a9850"],
-)
+    corr_df = teams.df[metrics].corr(method="pearson")
 
-sns.set_style("white")
-sns.set_context("notebook", font_scale=0.8)
+    cmap = LinearSegmentedColormap.from_list(
+        "red_white_green",
+        ["#d73027", "#ffffff", "#1a9850"],
+    )
 
-fig, ax = plt.subplots(figsize=(6, 4.5), facecolor="none")
+    sns.set_style("white")
+    sns.set_context("notebook", font_scale=0.8)
 
-# Label formatting
-def format_label(label):
-    has_pct = False
-    if "pct" in label:
-        has_pct = True
-        label = label.replace("pct", "").strip("_")
-    label = label.replace("_", " ").title()
-    if has_pct:
-        label += " (%)"
-    if len(label) > 20:
-        parts = label.split(" ")
-        mid = len(parts) // 2
-        label = " ".join(parts[:mid]) + "\n" + " ".join(parts[mid:])
-    return label
+    fig, ax = plt.subplots(figsize=(6, 4.5), facecolor="none")
 
-labels = [format_label(m) for m in metrics]
+    def format_label(label):
+        has_pct = False
+        if "pct" in label:
+            has_pct = True
+            label = label.replace("pct", "").strip("_")
+        label = label.replace("_", " ").title()
+        if has_pct:
+            label += " (%)"
+        if len(label) > 20:
+            parts = label.split(" ")
+            mid = len(parts) // 2
+            label = " ".join(parts[:mid]) + "\n" + " ".join(parts[mid:])
+        return label
 
-sns.heatmap(
-    corr_df,
-    annot=True,
-    fmt=".2f",
-    cmap=cmap,
-    center=0,
-    vmin=-1,
-    vmax=1,
-    linewidths=0.5,
-    linecolor="lightgray",
-    square=True,
-    annot_kws={"size": 8, "weight": "bold"},
-    cbar_kws={"shrink": 0.7},
-)
+    labels = [format_label(m) for m in metrics]
 
-ax.set_xticklabels(labels, rotation=45, ha="right", wrap=True)
-ax.set_yticklabels(labels, rotation=0)
+    sns.heatmap(
+        corr_df,
+        annot=True,
+        fmt=".2f",
+        cmap=cmap,
+        center=0,
+        vmin=-1,
+        vmax=1,
+        linewidths=0.5,
+        linecolor="lightgray",
+        square=True,
+        annot_kws={"size": 8, "weight": "bold"},
+        cbar_kws={"shrink": 0.7},
+    )
 
-sns.despine(left=True, bottom=True)
+    ax.set_xticklabels(labels, rotation=45, ha="right", wrap=True)
+    ax.set_yticklabels(labels, rotation=0)
 
-ax.set_title(
-    "Correlation Matrix – Team Build-Up Metrics",
-    fontsize=12,
-    weight="bold",
-)
+    sns.despine(left=True, bottom=True)
 
-st.pyplot(fig, transparent=True)
+    ax.set_title(
+        "Correlation Matrix – Team Build-Up Metrics",
+        fontsize=12,
+        weight="bold",
+    )
+
+    st.pyplot(fig, transparent=True)
