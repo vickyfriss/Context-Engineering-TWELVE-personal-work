@@ -35,6 +35,7 @@ st.write("Team build-up analyst measuring teams performance in their build-up pl
 metrics = [
     #"buildup_to_create_pct",
     #"buildup_to_direct_pct",
+    "progression_to_midfield_pct",
     "buildup_that_ends_with_finish_pct",
     "turnover_pct_buildup",
     "opp_box_entries_within_7s_after_turnover",
@@ -50,6 +51,7 @@ style_metrics = [
 
 quality_metrics = [
     "first_line_break_pct_buildup",
+    "progression_to_midfield_pct",
     "buildup_that_ends_with_finish_pct",
     "turnover_pct_buildup",
     "opp_box_entries_within_7s_after_turnover",
