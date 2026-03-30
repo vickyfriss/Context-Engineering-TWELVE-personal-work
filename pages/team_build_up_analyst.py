@@ -107,7 +107,7 @@ if chat.state == "empty":
         "buildup_to_create_pct": "Buildup to Create (%)",
         "buildup_to_direct_pct": "Buildup to Direct (%)",
         "progression_to_midfield_pct": "Progression to Midfield (%)",
-        "buildup_that_ends_with_finish_pct": "Buildup Ending in Finish (%)",
+        "buildup_that_ends_with_finish_pct": "Buildup Ending in Finish Phase (%)",
         "first_line_break_pct_buildup": "1st Line Break (%)",
         "second_last_line_break_pct_buildup": "2nd Last Line Break (%)",
         "turnover_pct_buildup": "Turnover (%)",
