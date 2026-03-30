@@ -19,7 +19,10 @@ clustering.ipynb
 secrets.toml
 /raw data/
 # Ignore all Parquet files and the dynamic_events_pl_24 directory
-*.parquet
+#*.parquet #Need to have it in Git as otherwise it won't be read by Streamlit when 
+match_periods.parquet
+matches_clean.parquet
+players_match.parquet
 /data/dynamic_events_pl_24/
 data/dynamic_events_pl_24/
 venv/
