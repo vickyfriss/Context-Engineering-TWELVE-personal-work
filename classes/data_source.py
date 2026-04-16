@@ -688,6 +688,7 @@ class TeamStats(Stats):
     def __init__(
         self,
         data_folder: str | Path = "data/team_build_up_analyst",
+        #data_folder: str | Path = "data/team_build_up_style_analyst",
         minimal_minutes: int = 0,
         file_pattern: str = "*.csv",
     ) -> None:

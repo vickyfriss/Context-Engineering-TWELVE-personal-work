@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
+from pydoc import describe
 from typing import List, Union, Dict
 
+from anyio import value
 import pandas as pd
 
 from openai import OpenAI
@@ -745,6 +747,7 @@ class TeamDescription(Description):
                 {"role": "assistant", "content": "Sure!"},
             ]
         return intro
+    
 
     def write_out_team_metric(self, metric: str) -> str:
         metric_map = {
@@ -804,6 +807,111 @@ class TeamDescription(Description):
             "The second sentence should describe the team's specific strengths based on the build-up metrics." 
             "The third sentence should describe aspects in which the team is average and/or weak based on the metrics." 
             "Finally, summarise exactly how the team's build-up compares to other teams based on the build-up metrics."
+            "Use only the information given in the description to answer, do not make assumptions or add any information. Use only the metrics I gave you and no others. "
+            #"Sentence 1: overall performance in the build-up quality performance-metrics. "
+            #"Sentence 2: key strengths based on the build-up quality perofmrnace metrics. "
+            #Sentence 3: weaknesses or average areas based on the metrics. "
+            #"Sentence 4: a clear comparison with build-up performance-metrics to other teams."
+        )
+        return [{"role": "user", "content": prompt}]
+    
+
+
+
+class TeamStyleDescription(Description):
+    output_token_limit = 180
+
+    @property
+    def gpt_examples_path(self):
+        return f"{self.gpt_examples_base}/team_buildup_style.xlsx"
+
+    @property
+    def describe_paths(self):
+        return [f"{self.describe_base}/team_buildup_style.xlsx"]
+
+    def __init__(self, team: Team):
+        self.team = team
+        super().__init__()
+
+    def get_intro_messages(self) -> List[Dict[str, str]]:
+        intro = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a football build-up analyst. "
+                    "You provide succinct, data-grounded explanations about how teams build up play. "
+                    "You must base your answers only on the data description and the provided Q/A context."
+                ),
+            },
+        ]
+        if len(self.describe_paths) > 0:
+            intro += [
+                {
+                    "role": "user",
+                    "content": "First, could you answer some questions about the build-up metrics for me?",
+                },
+                {"role": "assistant", "content": "Sure!"},
+            ]
+        return intro
+    
+    def describe_level_style(
+        self,
+        value,
+        thresholds=[1.5, 0.5, -0.5, -1.5],
+        words=["very high", "high", "average", "low", "very low"],
+    ):
+        return sentences.describe(thresholds, words, value)
+
+    def write_out_team_metric(self, metric: str) -> str:
+        metric_map = {
+            "prop_direct": "buildup ends with long pass",
+            "prop_goalkeeper_involved": "goalkeeper involved in the buildup",
+            "avg_successful_passes": "average successful passes in the buildup",
+            "avg_phase_duration_seconds": "average phase duration",
+            "avg_players_involved": "average number of players involved",
+            "build_ups_per_game": "number of build-Ups per Game",            
+        }
+        return metric_map.get(metric, metric.replace("_", " "))
+
+    def synthesize_text(self):
+        team = self.team
+        metrics = self.team.relevant_metrics
+
+        style_metrics = [
+            "prop_direct",
+            "prop_goalkeeper_involved",
+            "avg_successful_passes",
+            "avg_phase_duration_seconds",
+            "avg_players_involved",
+            "build_ups_per_game"
+        ]
+
+        
+
+        description = (
+            f"Here is a statistical description of {team.name}'s build-up play, compared to other teams\n\n")
+
+        metric_groups = {
+            "style": [metric for metric in metrics if metric in style_metrics],
+            #"quality": [metric for metric in metrics if metric in quality_metrics],
+        }
+
+        for group_name, group_metrics in metric_groups.items():
+            for metric in group_metrics:
+                z_value = team.ser_metrics[metric + "_Z"]
+
+                description += f"{team.name} was "
+                description += self.describe_level_style(z_value)
+                description += " in " + self.write_out_team_metric(metric)
+                description += " compared to other teams."
+
+        return description
+
+    def get_prompt_messages(self) -> List[Dict[str, str]]:
+        prompt = (
+            "Please use the statistical description enclosed with ``` to give a concise, 3 sentence summary of the team's build-up style. The first sentence should use varied language to give an overview of the team." 
+            "The second sentence should describe the team's most distinctive style baseed on the build-up metrics." 
+            "Finally, summarise exactly how the team's build-up style compares to other teams based on the build-up metrics."
             "Use only the information given in the description to answer, do not make assumptions or add any information. Use only the metrics I gave you and no others. "
             #"Sentence 1: overall performance in the build-up quality performance-metrics. "
             #"Sentence 2: key strengths based on the build-up quality perofmrnace metrics. "
