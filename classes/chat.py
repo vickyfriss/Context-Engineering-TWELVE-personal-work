@@ -10,6 +10,13 @@ from classes.embeddings import TeamEmbeddings
 from settings import USE_GEMINI
 if USE_GEMINI:
     from settings import USE_GEMINI, GEMINI_API_KEY, GEMINI_CHAT_MODEL
+
+from settings import USE_GEMINI, USE_LM_STUDIO
+
+if USE_GEMINI:
+    from settings import GEMINI_API_KEY, GEMINI_CHAT_MODEL
+elif USE_LM_STUDIO:
+    from settings import LM_STUDIO_API_KEY, LM_STUDIO_CHAT_MODEL, LM_STUDIO_API_BASE
 else:
     from settings import (
         GPT_BASE,
@@ -143,6 +150,34 @@ class Chat:
             response = chat.send_message(content=converted_msgs["content"])
 
             answer = response.text
+        elif USE_LM_STUDIO:
+            client = OpenAI(api_key=LM_STUDIO_API_KEY, base_url=LM_STUDIO_API_BASE)
+            if stream:
+                # Collect chunks eagerly so the generator over the list is
+                # near-instantaneous — preventing Streamlit re-runs from
+                # hitting the same generator while it is still executing.
+                chunks = [
+                    chunk.choices[0].delta.content
+                    for chunk in client.chat.completions.create(
+                        model=LM_STUDIO_CHAT_MODEL,
+                        messages=messages,
+                        temperature=temperature,
+                        stream=True,
+                    )
+                    if chunk.choices and chunk.choices[0].delta.content
+                ]
+
+                def streamed_chunks():
+                    yield from chunks
+
+                answer = streamed_chunks()
+            else:
+                response = client.chat.completions.create(
+                    model=LM_STUDIO_CHAT_MODEL,
+                    messages=messages,
+                    temperature=temperature,
+                )
+                answer = response.choices[0].message.content
         else:
             client = OpenAI(api_key=GPT_KEY, base_url=GPT_BASE)
             if stream:
@@ -265,11 +300,42 @@ class Chat:
 
 
 class PlayerChat(Chat):
+    tools = [
+        {
+            "type": "function",
+            "name": "get_player_summary",
+            "description": "Returns a data-driven statistical summary of the selected player.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+        {
+            "type": "function",
+            "name": "search_football_knowledge",
+            "description": "Searches a knowledge base for information relevant to a question about data analytics in football, especially about forwards.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The question or topic to search for.",
+                    }
+                },
+                "required": ["query"],
+            },
+        },
+    ]
+
     def __init__(self, chat_state_hash, player, players, state="empty"):
         self.embeddings = PlayerEmbeddings()
         self.player = player
         self.players = players
         super().__init__(chat_state_hash, state=state)
+
+    def _get_player_summary(self):
+        return PlayerDescription(self.player).synthesize_text()
+
+    def _search_knowledge(self, query):
+        results = self.embeddings.search(query, top_n=5)
+        return "\n".join(results["assistant"].to_list())
 
     def get_input(self):
         """
@@ -289,7 +355,8 @@ class PlayerChat(Chat):
         """
         Instruction for the agent.
         """
-        first_messages = [
+        if USE_GEMINI or USE_LM_STUDIO:
+            first_messages = [
             {"role": "system", "content": "You are a UK-based football scout."},
             {
                 "role": "user",
@@ -304,9 +371,148 @@ class PlayerChat(Chat):
                 ),
             },
         ]
-        return first_messages
+            return first_messages
+        else:
+            return [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a UK-based football scout. "
+                        f"The user has selected the player {self.player.name}, and the conversation will be about them. "
+                        "You will receive relevant information to answer a user's questions and then be asked to provide a response. "
+                        "Choose the tool that best fits the user's query to respond."
+                        "- If the user is asking for information about the player, use the get_player_summary function. "  
+                        "- If the user is asking for general football knowledge, use the search_football_knowledge function. "
+                        "- If none of the tools are relevant to the user's query, respond directly to the user that the question is outside your scope. "
+                        "- If the user asks about a different player, respond that you can only answer questions about the selected player and if they want information about a different player, they need to select that player first on the sidebar."
+                        "All user messages will be prefixed with 'User:' and enclosed with ```. "
+                        "When responding to the user, speak directly to them. "
+                        "Use the information provided before the query to provide 2 sentence answers."
+                        "Do not deviate from this information or provide additional information that is not in the text returned by the functions."
+                    ),
+                }
+            ]
+
+    def handle_input(self, input, reasoning_effort=None, temperature=1, stream=False):
+        if USE_GEMINI or USE_LM_STUDIO:
+            super().handle_input(input, reasoning_effort=reasoning_effort, temperature=temperature, stream=stream)
+            return
+        # OpenAI function-calling path
+        messages = self.instruction_messages()
+        messages = messages + self.messages_to_display.copy()
+        messages = [m for m in messages if isinstance(m["content"], str)]
+        messages.append({"role": "user", "content": f"```User: {input}```"})
+
+        self.messages_to_display.append({"role": "user", "content": input})
+
+        client = OpenAI(api_key=GPT_KEY, base_url=GPT_BASE)
+
+        # Call 1: model picks a tool if relevant, or answers directly if not
+        r1 = client.responses.create(
+            model=GPT_CHAT_MODEL,
+            input=messages,
+            tools=self.tools,
+            tool_choice="auto",
+        )
+        fc = next((item for item in r1.output if item.type == "function_call"), None)
+
+        if fc is None:
+            # Model decided no tool was needed — use its response directly
+            st.expander("Chat transcript", expanded=False).write(
+                [{"role": m.get("role"), "content": m.get("content", "")} for m in messages if isinstance(m, dict)]
+            )
+            self.messages_to_display.append({"role": "assistant", "content": r1.output_text})
+            return
+
+        if fc.name == "get_player_summary":
+            result = self._get_player_summary()
+        else:
+            result = self._search_knowledge(json.loads(fc.arguments)["query"])
+
+        # Call 2: final answer, no more tools
+        tool_inputs = list(messages) + list(r1.output) + [
+            {"type": "function_call_output", "call_id": fc.call_id, "output": result}
+        ]
+
+        formatted = []
+        for item in tool_inputs:
+            if isinstance(item, dict):
+                if item.get("type") == "function_call_output":
+                    formatted.append({"tool_result": item["output"] or "(empty)", "call_id": item["call_id"]})
+                else:
+                    formatted.append({"role": item.get("role"), "content": item.get("content", "")})
+            elif hasattr(item, "type"):
+                if item.type == "function_call":
+                    formatted.append({"tool_call": item.name, "arguments": json.loads(item.arguments)})
+                # reasoning items are skipped
+        st.expander("Chat transcript", expanded=False).write(formatted)
+       
+        if stream:
+            if GPT_SUPPORTS_REASONING:
+                reasoning_effort = reasoning_effort if reasoning_effort in GPT_AVAILABLE_REASONING_EFFORTS else GPT_AVAILABLE_REASONING_EFFORTS[0]
+                response_stream = client.responses.create(
+                    model=GPT_CHAT_MODEL,
+                    input=tool_inputs,
+                    tool_choice="none",
+                    tools=self.tools,
+                    reasoning={"effort": reasoning_effort},
+                    stream=True,
+                )
+            elif GPT_SUPPORTS_TEMPERATURE:
+                response_stream = client.responses.create(
+                    model=GPT_CHAT_MODEL,
+                    input=tool_inputs,
+                    tool_choice="none",
+                    tools=self.tools,
+                    temperature=temperature,
+                    stream=True,
+                )
+            else:
+                response_stream = client.responses.create(
+                    model=GPT_CHAT_MODEL,
+                    input=tool_inputs,
+                    tool_choice="none",
+                    tools=self.tools,
+                    stream=True,
+                )
+
+            def streamed_chunks():
+                for event in response_stream:
+                    if event.type == "response.output_text.delta":
+                        yield event.delta
+
+            answer = streamed_chunks()
+        else:
+            if GPT_SUPPORTS_REASONING:
+                reasoning_effort = reasoning_effort if reasoning_effort in GPT_AVAILABLE_REASONING_EFFORTS else GPT_AVAILABLE_REASONING_EFFORTS[0]
+                response = client.responses.create(
+                    model=GPT_CHAT_MODEL,
+                    input=tool_inputs,
+                    tool_choice="none",
+                    tools=self.tools,
+                    reasoning={"effort": reasoning_effort},
+                )
+            elif GPT_SUPPORTS_TEMPERATURE:
+                response = client.responses.create(
+                    model=GPT_CHAT_MODEL,
+                    input=tool_inputs,
+                    tool_choice="none",
+                    tools=self.tools,
+                    temperature=temperature,
+                )
+            else:
+                response = client.responses.create(
+                    model=GPT_CHAT_MODEL,
+                    input=tool_inputs,
+                    tool_choice="none",
+                    tools=self.tools,
+                )
+            answer = response.output_text
+
+        self.messages_to_display.append({"role": "assistant", "content": answer})
 
     def get_relevant_info(self, query):
+        # Used by the Gemini/LM Studio path via super().handle_input
 
         # If there is no query then use the last message from the user
         if query == "":

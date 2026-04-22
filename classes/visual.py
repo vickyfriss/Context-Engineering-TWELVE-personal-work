@@ -241,7 +241,6 @@ class DistributionPlot(Visual):
             text = [name]
         elif isinstance(text, str):
             text = [text]
-
         legend = True
         color = next(self.marker_color)
         marker = next(self.marker_shape)
@@ -415,7 +414,6 @@ class DistributionPlotPersonality(Visual):
             text = [name]
         elif isinstance(text, str):
             text = [text]
-
         legend = True
         color = next(self.marker_color)
         marker = next(self.marker_shape)

@@ -103,6 +103,10 @@ if chat.state == "empty":
 
     chat.state = "default"
 
+# Show the wordalisation pre-prompting — persists across chat turns via session state
+if "description_transcript" in st.session_state:
+    st.expander("Wordalisation pre-prompting", expanded=False).write(st.session_state["description_transcript"])
+
 # Now we want to get the user input, display the messages and save the state
 chat.get_input()
 chat.display_messages()

@@ -26,3 +26,6 @@ players_match.parquet
 /data/dynamic_events_pl_24/
 data/dynamic_events_pl_24/
 venv/
+user_info.json
+clustering.ipynb
+

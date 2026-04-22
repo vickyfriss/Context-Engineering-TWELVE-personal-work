@@ -87,6 +87,7 @@ To use Open AI you need a API key. Then you need to add the following lines to y
 
 ```toml
 USE_GEMINI = false
+USE_LM_STUDIO = false
 GPT_BASE = "address of you deployment of Chat GPT"
 GPT_VERSION = "version date"
 GPT_KEY = "your key"
@@ -99,6 +100,7 @@ If, instead of using OpenAI's API, you want to use Google's. You need to add the
 
 ```toml
 USE_GEMINI = true
+USE_LM_STUDIO = false
 GEMINI_API_KEY = "YOUR_API_KEY"
 
 # Can use any chat model
@@ -107,3 +109,22 @@ GEMINI_CHAT_MODEL = "gemini-1.5-flash"
 # Can use any embedding model
 GEMINI_EMBEDDING_MODEL = "models/text-embedding-004"
 ```
+
+### Using LM Studio Local Models
+First you should download LM Studio and load a local model of your choosing. A good free option is `openai/gpt-oss-20b` for chat and `text-embedding-bge-m3` for embeddings.
+
+If you want to run models locally using LM Studio, you need to add the following lines to your [.streamlit/secrets.toml](.streamlit/secrets.toml) file.
+
+```toml
+USE_GEMINI = false
+USE_LM_STUDIO = true
+LM_STUDIO_API_KEY = "lmstudio"
+
+# Copy the "Reachable at" address from LM Studio's local server page and append /v1
+LM_STUDIO_API_BASE = "http://...../v1"
+
+# Can use any chat model loaded in LM Studio
+LM_STUDIO_CHAT_MODEL = "openai/gpt-oss-20b"
+
+# Can use any embedding model loaded in LM Studio
+LM_STUDIO_EMBEDDING_MODEL = "text-embedding-bge-m3"

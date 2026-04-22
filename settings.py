@@ -29,3 +29,11 @@ USE_GEMINI = st.secrets.get("USE_GEMINI", False)
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 GEMINI_CHAT_MODEL = st.secrets.get("GEMINI_CHAT_MODEL", "")
 GEMINI_EMBEDDING_MODEL = st.secrets.get("GEMINI_EMBEDDING_MODEL", "")
+
+#Local LM Studio secrets
+USE_LM_STUDIO = st.secrets.get("USE_LM_STUDIO", False)
+LM_STUDIO_API_KEY = st.secrets.get("LM_STUDIO_API_KEY", "")
+LM_STUDIO_API_BASE = st.secrets.get("LM_STUDIO_API_BASE", "")
+LM_STUDIO_CHAT_MODEL = st.secrets.get("LM_STUDIO_CHAT_MODEL", "")
+LM_STUDIO_EMBEDDING_MODEL = st.secrets.get("LM_STUDIO_EMBEDDING_MODEL", "")
+

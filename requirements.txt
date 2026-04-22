@@ -16,3 +16,4 @@ scipy
 plotly
 scikit-learn
 openpyxl
+customerio==2.1

@@ -15,10 +15,12 @@ from classes.data_source import PersonStat
 
 import json
 
-from settings import USE_GEMINI
+from settings import USE_GEMINI, USE_LM_STUDIO
 
 if USE_GEMINI:
-    from settings import USE_GEMINI, GEMINI_API_KEY, GEMINI_CHAT_MODEL
+    from settings import GEMINI_API_KEY, GEMINI_CHAT_MODEL
+elif USE_LM_STUDIO:
+    from settings import LM_STUDIO_API_KEY, LM_STUDIO_CHAT_MODEL, LM_STUDIO_API_BASE
 else:
     from settings import (
         GPT_BASE,
@@ -185,7 +187,7 @@ class Description(ABC):
             str
         """
 
-        st.expander("Chat transcript", expanded=False).write(self.messages)
+        st.session_state["description_transcript"] = self.messages
 
         if USE_GEMINI:
             import google.generativeai as genai
