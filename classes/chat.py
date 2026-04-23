@@ -1219,9 +1219,7 @@ class TeamChat(Chat):
             "description": "Compares the selected team's build-up style with another team.",
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "other_team_name": {"type": "string"}
-                },
+                "properties": {"other_team_name": {"type": "string"}},
                 "required": ["other_team_name"],
             },
         },
@@ -1237,30 +1235,24 @@ class TeamChat(Chat):
             "description": "Compares the selected team's build-up performance with another team.",
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "other_team_name": {"type": "string"}
-                },
+                "properties": {"other_team_name": {"type": "string"}},
                 "required": ["other_team_name"],
             },
         },
     ]
 
     STYLE_METRICS = [
-        "prop_direct",
-        "prop_goalkeeper_involved",
-        "avg_successful_passes",
-        "avg_phase_duration_seconds",
-        "avg_players_involved",
-        "build_ups_per_game",
+        "buildup_to_create_pct",
+        "buildup_to_direct_pct",
     ]
 
-    QUALITY_METRICS = [
-        "buildup_that_ends_with_finish_pct",
-        "turnover_pct_buildup",
-        "opp_box_entries_within_7s_after_turnover",
-        "opp_shot_probability_within_7s_after_turnover",
-        "first_line_break_pct_buildup",
-    ]
+    QUALITY_METRICS_INFO = {
+        "buildup_that_ends_with_finish_pct": True,
+        "turnover_pct_buildup": False,
+        "opp_box_entries_within_7s_after_turnover": False,
+        "opp_shot_probability_within_7s_after_turnover": False,
+        "first_line_break_pct_buildup": True,
+    }
 
     def __init__(self, chat_state_hash, team, teams, state="empty"):
         self.team = team
@@ -1274,37 +1266,20 @@ class TeamChat(Chat):
             placeholder=f"What would you like to know about {self.team.name}?"
         ):
             if len(x) > 500:
-                st.error("Message too long (max 500 characters)")
+                st.error("Message too long (max 500 chars).")
                 return
-
             self.handle_input(x)
 
-    # ---------------- SYSTEM PROMPT ----------------
-    def instruction_messages(self):
-        return [
-            {
-                "role": "system",
-                "content": (
-                    "You are a football build-up analyst.\n"
-                    f"Selected team: {self.team.name}\n\n"
-                    "Use tools for style or performance queries.\n"
-                    "Max 2 sentences.\n"
-                    "Do not hallucinate metrics."
-                ),
-            }
-        ]
-
-    # ---------------- CRITICAL FIX ----------------
+    # ---------------- SAFE MESSAGE CLEANER (FIX FOR YOUR ERROR) ----------------
     def _safe_messages(self, messages):
         safe = []
-
         for m in messages:
             if not isinstance(m, dict):
                 continue
 
             content = m.get("content")
 
-            # 🚨 ONLY STRINGS ALLOWED
+            # CRITICAL FIX: remove DistributionPlot / df / objects
             if not isinstance(content, str):
                 content = str(content)
 
@@ -1315,123 +1290,166 @@ class TeamChat(Chat):
 
         return safe
 
+    # ---------------- SYSTEM PROMPT ----------------
+    def instruction_messages(self):
+        return [
+            {
+                "role": "system",
+                "content": (
+                    f"You are a football build-up analyst for {self.team.name}.\n"
+                    "You can answer style and performance questions.\n"
+                    "Use tools when appropriate.\n"
+                    "Max 2 sentences. No bullet points."
+                ),
+            }
+        ]
+
+    # ---------------- STYLE ----------------
+    def _get_team_style_summary(self):
+        desc = TeamStyleDescription(self.team).synthesize_text()
+
+        lines = [desc, "\nStyle metrics:"]
+        for m in self.STYLE_METRICS:
+            val = self.team.ser_metrics.get(m)
+            if val is not None:
+                lines.append(f"- {m}: {round(val, 2)}")
+
+        return "\n".join(lines)
+
+    def _compare_team_styles(self, other_team_name):
+        other = self._find_team(other_team_name)
+        if not other:
+            return f"Could not identify '{other_team_name}'."
+
+        t1, t2 = self.team, other
+        out = [f"Style comparison: {t1.name} vs {t2.name}"]
+
+        for m in self.STYLE_METRICS:
+            a = t1.ser_metrics.get(m)
+            b = t2.ser_metrics.get(m)
+            if a is None or b is None:
+                continue
+
+            better = t1.name if a > b else t2.name
+            out.append(f"{better} higher in {m}")
+
+        return "\n".join(out)
+
+    # ---------------- PERFORMANCE ----------------
+    def _get_team_performance_summary(self):
+        lines = [f"{self.team.name} performance summary:"]
+
+        for m, higher_is_better in self.QUALITY_METRICS_INFO.items():
+            val = self.team.ser_metrics.get(m)
+            if val is None:
+                continue
+
+            label = "strong" if val > 0.66 else "average" if val > 0.33 else "weak"
+            lines.append(f"- {m}: {label}")
+
+        return "\n".join(lines)
+
+    def _compare_team_performance(self, other_team_name):
+        other = self._find_team(other_team_name)
+        if not other:
+            return f"Could not identify '{other_team_name}'."
+
+        t1, t2 = self.team, other
+        out = [f"Performance comparison: {t1.name} vs {t2.name}"]
+
+        for m in self.QUALITY_METRICS_INFO:
+            a = t1.ser_metrics.get(m)
+            b = t2.ser_metrics.get(m)
+            if a is None or b is None:
+                continue
+
+            better = t1.name if a > b else t2.name
+            out.append(f"{better} stronger in {m}")
+
+        return "\n".join(out)
+
     # ---------------- TEAM MATCHING ----------------
-    def _find_team_name(self, name):
+    def _find_team(self, name):
         if not name:
             return None
 
         names = self.teams.df["team"].dropna().astype(str).unique().tolist()
-        mapping = {n.lower(): n for n in names}
+        lower = {n.lower(): n for n in names}
 
-        if name.lower() in mapping:
-            return mapping[name.lower()]
+        if name.lower() in lower:
+            return self.teams.to_data_point_by_team(lower[name.lower()])
 
         matches = [n for n in names if name.lower() in n.lower()]
-        return matches[0] if len(matches) == 1 else None
+        if len(matches) == 1:
+            return self.teams.to_data_point_by_team(matches[0])
 
-    # ---------------- STYLE ----------------
-    def _style_summary(self):
-        desc = TeamStyleDescription(self.team).synthesize_text()
-        return desc, None  # no plot handling here
-
-    def _compare_style(self, other):
-        return f"{self.team.name} vs {other.name} (style comparison)", None
-
-    # ---------------- PERFORMANCE ----------------
-    def _performance_summary(self):
-        return f"{self.team.name} performance summary", None
-
-    def _compare_performance(self, other):
-        return f"{self.team.name} vs {other.name} (performance comparison)", None
+        return None
 
     # ---------------- MAIN HANDLER ----------------
     def handle_input(self, user_input):
 
-        with st.chat_message("user"):
-            st.write(user_input)
+        messages = self._safe_messages(
+            self.instruction_messages() + self.messages_to_display + [
+                {"role": "user", "content": user_input}
+            ]
+        )
 
-        messages = self.instruction_messages() + self.messages_to_display
-        messages.append({"role": "user", "content": user_input})
-
-        self.messages_to_display.append({
-            "role": "user",
-            "content": user_input
-        })
+        self.messages_to_display.append(
+            {"role": "user", "content": user_input}
+        )
 
         client = OpenAI(api_key=GPT_KEY, base_url=GPT_BASE)
 
-        # 🚨 SAFE INPUT ONLY
         r1 = client.responses.create(
             model=GPT_CHAT_MODEL,
-            input=self._safe_messages(messages),
+            input=messages,
             tools=self.tools,
             tool_choice="auto",
         )
 
         fc = next((x for x in r1.output if x.type == "function_call"), None)
 
-        if fc:
-
-            args = json.loads(fc.arguments or "{}")
-
-            if fc.name == "get_team_style_summary":
-                text, _ = self._style_summary()
-
-            elif fc.name == "compare_team_styles":
-                other = self._find_team_name(args.get("other_team_name"))
-                if other:
-                    text, _ = self._compare_style(
-                        self.teams.to_data_point_by_team(other)
-                    )
-                else:
-                    text = "Team not found."
-
-            elif fc.name == "get_team_performance_summary":
-                text, _ = self._performance_summary()
-
-            elif fc.name == "compare_team_performance":
-                other = self._find_team_name(args.get("other_team_name"))
-                if other:
-                    text, _ = self._compare_performance(
-                        self.teams.to_data_point_by_team(other)
-                    )
-                else:
-                    text = "Team not found."
-
-            else:
-                text = "Unsupported request."
-
-            tool_call = next(x for x in r1.output if x.type == "function_call")
-
-            final = client.responses.create(
-                model=GPT_CHAT_MODEL,
-                input=[
-                    *self._safe_messages(messages),
-                    {
-                        "type": "function_call",
-                        "call_id": tool_call.call_id,
-                        "name": tool_call.name,
-                        "arguments": tool_call.arguments,
-                    },
-                    {
-                        "type": "function_call_output",
-                        "call_id": tool_call.call_id,
-                        "output": str(text),
-                    },
-                ],
+        if not fc:
+            self.messages_to_display.append(
+                {"role": "assistant", "content": r1.output_text}
             )
+            return
 
-            response_text = final.output_text
+        args = json.loads(fc.arguments) if fc.arguments else {}
+
+        if fc.name == "get_team_style_summary":
+            result = self._get_team_style_summary()
+
+        elif fc.name == "compare_team_styles":
+            result = self._compare_team_styles(args.get("other_team_name"))
+
+        elif fc.name == "get_team_performance_summary":
+            result = self._get_team_performance_summary()
+
+        elif fc.name == "compare_team_performance":
+            result = self._compare_team_performance(args.get("other_team_name"))
 
         else:
-            response_text = r1.output_text
+            result = "Unsupported tool."
 
-        # ---------------- UI ONLY ----------------
-        with st.chat_message("assistant"):
-            st.write(response_text)
+        final = client.responses.create(
+            model=GPT_CHAT_MODEL,
+            input=[
+                *messages,
+                {
+                    "type": "function_call",
+                    "call_id": fc.call_id,
+                    "name": fc.name,
+                    "arguments": fc.arguments,
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": fc.call_id,
+                    "output": result,
+                },
+            ],
+        )
 
-        # ---------------- MEMORY SAFE ----------------
-        self.messages_to_display.append({
-            "role": "assistant",
-            "content": response_text
-        })
+        self.messages_to_display.append(
+            {"role": "assistant", "content": final.output_text}
+        )
