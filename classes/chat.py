@@ -1202,44 +1202,45 @@ class TeamBuildUpChat(Chat):
 #             return text
 
 
+import json
+import streamlit as st
+from difflib import get_close_matches
+from openai import OpenAI
 
 
 class TeamChat(Chat):
 
+    # ---------------- TOOLS ----------------
     tools = [
         {
             "type": "function",
             "name": "summarise_style",
-            "description": "Returns a natural language summary of the selected team's build-up style.",
+            "description": "Summarises the selected team's build-up style.",
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
         {
             "type": "function",
             "name": "summarise_performance",
-            "description": "Returns a natural language summary of the selected team's build-up performance.",
+            "description": "Summarises the selected team's build-up performance.",
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
         {
             "type": "function",
             "name": "compare_style",
-            "description": "Compares build-up style between the selected team and another team.",
+            "description": "Compare style with another team.",
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "other_team_name": {"type": "string"},
-                },
+                "properties": {"other_team_name": {"type": "string"}},
                 "required": ["other_team_name"],
             },
         },
         {
             "type": "function",
             "name": "compare_performance",
-            "description": "Compares build-up performance between the selected team and another team.",
+            "description": "Compare performance with another team.",
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "other_team_name": {"type": "string"},
-                },
+                "properties": {"other_team_name": {"type": "string"}},
                 "required": ["other_team_name"],
             },
         },
@@ -1267,182 +1268,182 @@ class TeamChat(Chat):
         "first_line_break_pct_buildup": True,
     }
 
+    # ---------------- INIT ----------------
     def __init__(self, chat_state_hash, team, teams, state="empty"):
-        self.team = team
         self.teams = teams
+
+        # 🔥 Persist team across reruns
+        if "selected_team_name" not in st.session_state:
+            st.session_state["selected_team_name"] = None
+
+        self.selected_team = None
+        if st.session_state["selected_team_name"]:
+            self.selected_team = self.teams.to_data_point_by_team(
+                st.session_state["selected_team_name"]
+            )
+
         super().__init__(chat_state_hash, state=state)
 
     # ---------------- INPUT ----------------
     def get_input(self):
-        if x := st.chat_input(
-            placeholder=f"What would you like to know about {self.team.name}?"
-        ):
+        if x := st.chat_input("Ask about a team..."):
             if len(x) > 500:
-                st.error("Message too long (max 500 chars).")
+                st.error("Message too long.")
                 return
             self.handle_input(x, stream=True)
 
-    # ---------------- INSTRUCTIONS ----------------
-    def instruction_messages(self):
-        return [
-            {
-                "role": "system",
-                "content": (
-                    "You are a football data analyst. "
-                    "Turn structured data into clear, natural language insights. "
-                    "Always respond in 2 concise sentences. "
-                    "Do not use bullet points or lists."
-                ),
-            }
-        ]
-
-    # ---------------- HELPERS ----------------
-    def _find_team(self, name):
-        if not name:
-            return None
-
+    # ---------------- TEAM MATCHING ----------------
+    def _match_team(self, query):
         names = self.teams.df["team"].dropna().tolist()
-        lower_map = {n.lower(): n for n in names}
+        q = query.lower()
 
-        if name.lower() in lower_map:
-            return self.teams.to_data_point_by_team(lower_map[name.lower()])
+        # exact
+        for n in names:
+            if q == n.lower():
+                return n
 
-        matches = [n for n in names if name.lower() in n.lower()]
-        if len(matches) == 1:
-            return self.teams.to_data_point_by_team(matches[0])
+        # partial
+        for n in names:
+            if q in n.lower():
+                return n
+
+        # fuzzy
+        matches = get_close_matches(query, names, n=1, cutoff=0.6)
+        if matches:
+            return matches[0]
 
         return None
 
     # ---------------- STYLE ----------------
     def _summarise_style(self):
-        text = f"{self.team.name} build-up style. "
+        t = self.selected_team
 
-        for m in self.STYLE_METRICS:
-            v = self.team.ser_metrics.get(m)
-            if v is not None:
-                text += f"{m}: {round(v, 3)}. "
+        passes = t.ser_metrics.get("avg_passes", 0)
+        duration = t.ser_metrics.get("avg_duration", 0)
+        central = t.ser_metrics.get("prop_channel_center", 0)
 
-        return text
+        text = f"{t.name} tend to build up in a "
 
-    def _compare_style(self, other_team_name):
-        other = self._find_team(other_team_name)
-        if not other:
-            return f"Could not identify '{other_team_name}'."
+        if passes > 0.6:
+            text += "patient and possession-oriented way, "
+        else:
+            text += "more direct manner, "
 
-        text = f"Style comparison between {self.team.name} and {other.name}. "
+        text += f"with sequences lasting around {round(duration, 2)} seconds. "
 
-        for m in self.STYLE_METRICS:
-            a = self.team.ser_metrics.get(m)
-            b = other.ser_metrics.get(m)
-            if a is None or b is None:
-                continue
-
-            diff = a - b
-            text += f"{m} difference: {round(diff, 3)}. "
+        if central > 0.5:
+            text += "They prefer progressing through central areas rather than using width."
+        else:
+            text += "They make greater use of wide areas to advance the ball."
 
         return text
 
     # ---------------- PERFORMANCE ----------------
     def _summarise_performance(self):
-        text = f"{self.team.name} build-up performance. "
+        t = self.selected_team
 
-        for m, higher_is_better in self.PERFORMANCE_METRICS.items():
-            v = self.team.ser_metrics.get(m)
-            if v is None:
-                continue
+        finish = t.ser_metrics.get("buildup_that_ends_with_finish_pct", 0)
+        turnover = 1 - t.ser_metrics.get("turnover_pct_buildup", 0)
 
-            if not higher_is_better:
-                v = 1 - v
+        text = f"{t.name} show "
 
-            text += f"{m}: {round(v, 3)}. "
+        if finish > 0.66:
+            text += "strong attacking output from build-up, "
+        elif finish < 0.33:
+            text += "limited attacking output from build-up, "
+        else:
+            text += "moderate attacking output, "
 
-        return text
-
-    def _compare_performance(self, other_team_name):
-        other = self._find_team(other_team_name)
-        if not other:
-            return f"Could not identify '{other_team_name}'."
-
-        text = f"Performance comparison between {self.team.name} and {other.name}. "
-
-        for m, higher_is_better in self.PERFORMANCE_METRICS.items():
-            a = self.team.ser_metrics.get(m)
-            b = other.ser_metrics.get(m)
-
-            if a is None or b is None:
-                continue
-
-            if not higher_is_better:
-                a, b = 1 - a, 1 - b
-
-            diff = a - b
-            text += f"{m} difference: {round(diff, 3)}. "
+        if turnover > 0.66:
+            text += "while maintaining good security in possession."
+        else:
+            text += "but remain vulnerable to turnovers under pressure."
 
         return text
 
-    # ---------------- CORE FIX (IMPORTANT) ----------------
-    def get_relevant_info(self, query):
-        return f"Selected team: {self.team.name}"
+    # ---------------- COMPARISONS ----------------
+    def _compare_style(self, other_name):
+        other_name = self._match_team(other_name)
+        if not other_name:
+            return "I couldn’t recognise the comparison team."
 
-    # ---------------- HANDLER ----------------
-    def handle_input(self, input, reasoning_effort=None, temperature=1, stream=False):
+        other = self.teams.to_data_point_by_team(other_name)
+        t = self.selected_team
 
-        messages = self.instruction_messages()
-        messages = messages + self.messages_to_display.copy()
-        messages = [m for m in messages if isinstance(m["content"], str)]
-        messages.append({"role": "user", "content": f"```User: {input}```"})
+        diff = t.ser_metrics["avg_passes"] - other.ser_metrics["avg_passes"]
 
-        self.messages_to_display.append({"role": "user", "content": input})
+        if diff > 0:
+            return f"{t.name} build up more patiently than {other.name}, using longer passing sequences."
+        else:
+            return f"{other.name} build up more patiently than {t.name}, with more passes per sequence."
 
-        client = OpenAI(api_key=GPT_KEY, base_url=GPT_BASE)
+    def _compare_performance(self, other_name):
+        other_name = self._match_team(other_name)
+        if not other_name:
+            return "I couldn’t recognise the comparison team."
 
-        r1 = client.responses.create(
-            model=GPT_CHAT_MODEL,
-            input=messages,
-            tools=self.tools,
-            tool_choice="auto",
+        other = self.teams.to_data_point_by_team(other_name)
+        t = self.selected_team
+
+        diff = (
+            t.ser_metrics["buildup_that_ends_with_finish_pct"]
+            - other.ser_metrics["buildup_that_ends_with_finish_pct"]
         )
 
-        fc = next((x for x in r1.output if x.type == "function_call"), None)
+        if diff > 0:
+            return f"{t.name} convert build-up into attacking situations more effectively than {other.name}."
+        else:
+            return f"{other.name} are more effective at turning build-up into attacking situations than {t.name}."
 
-        if fc is None:
-            self.messages_to_display.append(
-                {"role": "assistant", "content": r1.output_text}
-            )
+    # ---------------- HANDLE INPUT ----------------
+    def handle_input(self, input, stream=False, **kwargs):
+
+        # Save user message
+        self.messages_to_display.append({"role": "user", "content": input})
+
+        # ---------------- STEP 1: TEAM SELECTION ----------------
+        if self.selected_team is None:
+            match = self._match_team(input)
+
+            if match:
+                st.session_state["selected_team_name"] = match
+                self.selected_team = self.teams.to_data_point_by_team(match)
+
+                response = f"Nice choice — let’s take a closer look at {match}. What would you like to explore?"
+            else:
+                response = "I couldn’t find that team. Try something like Arsenal or Manchester United."
+
+            self.messages_to_display.append({"role": "assistant", "content": response})
             return
 
-        args = json.loads(fc.arguments or "{}")
+        # ---------------- STEP 2: SIMPLE ROUTING (NO LLM CONFUSION) ----------------
+        query = input.lower()
 
-        if fc.name == "summarise_style":
+        if "style" in query:
             result = self._summarise_style()
 
-        elif fc.name == "summarise_performance":
+        elif "performance" in query or "good" in query or "strong" in query:
             result = self._summarise_performance()
 
-        elif fc.name == "compare_style":
-            result = self._compare_style(args.get("other_team_name"))
-
-        elif fc.name == "compare_performance":
-            result = self._compare_performance(args.get("other_team_name"))
+        elif "compare" in query:
+            words = query.split()
+            other_team = words[-1]  # simple heuristic
+            result = self._compare_performance(other_team)
 
         else:
-            result = "Unsupported tool."
+            result = self._summarise_performance()
+
+        # ---------------- FINAL RESPONSE (LLM FOR POLISH) ----------------
+        client = OpenAI(api_key=GPT_KEY, base_url=GPT_BASE)
 
         final = client.responses.create(
             model=GPT_CHAT_MODEL,
             input=[
-                *messages,
                 {
-                    "type": "function_call",
-                    "call_id": fc.call_id,
-                    "name": fc.name,
-                    "arguments": fc.arguments,
+                    "role": "system",
+                    "content": "Rewrite the following into 2 natural, fluid sentences as a football analyst.",
                 },
-                {
-                    "type": "function_call_output",
-                    "call_id": fc.call_id,
-                    "output": result,
-                },
+                {"role": "user", "content": result},
             ],
         )
 
