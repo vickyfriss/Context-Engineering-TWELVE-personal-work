@@ -71,12 +71,9 @@ def add_page_selector():
     st.page_link("pages/embedder.py", label="Embdedding Tool")
     st.page_link("pages/wvs_chat.py", label="World Value Survey")
     st.page_link("pages/personality_test.py", label="Personality Test")
-    st.page_link("pages/own_page.py", label="Your Own Page")
+    #st.page_link("pages/own_page.py", label="Your Own Page")
     st.page_link("pages/team_build_up_analyst.py", label="Team Build-up Analyst")
-    st.page_link(
-        "pages/team_build_up_style_analyst.py",
-        label="Team Build-up Style Analyst",
-    )
+    #st.page_link("pages/team_build_up_style_analyst.py", label="Team Build-up Style Analyst")
 
     # st.image("data/ressources/img/TwelveEdu.png")
 
