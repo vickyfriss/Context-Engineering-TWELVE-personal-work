@@ -1210,10 +1210,10 @@ from openai import OpenAI
 class TeamChat(Chat):
 
     STYLE_METRICS = [
-        "prop_gk_involved",
+        #"prop_gk_involved",
         "avg_passes",
         "avg_duration",
-        "avg_players_involved",
+        #"avg_players_involved",
         "build_ups_per_game",
         "prop_channel_center",
         "prop_channel_half_space_left",
