@@ -681,6 +681,63 @@ class PersonChat(Chat):
 
 
 class TeamChat(Chat):
+    tools = [
+        {
+            "type": "function",
+            "name": "summarise_style",
+            "description": "Summarise one team's build-up style.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "team_name": {"type": "string"}
+                },
+                "required": ["team_name"],
+            },
+        },
+        {
+            "type": "function",
+            "name": "summarise_performance",
+            "description": "Summarise one team's build-up performance.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "team_name": {"type": "string"}
+                },
+                "required": ["team_name"],
+            },
+        },
+        {
+            "type": "function",
+            "name": "compare_style",
+            "description": "Compare build-up style between two or more teams.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "team_names": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    }
+                },
+                "required": ["team_names"],
+            },
+        },
+        {
+            "type": "function",
+            "name": "compare_performance",
+            "description": "Compare build-up performance between two or more teams.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "team_names": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    }
+                },
+                "required": ["team_names"],
+            },
+        },
+    ]
+
     STYLE_METRICS = [
         "avg_passes",
         "avg_duration",
@@ -703,28 +760,29 @@ class TeamChat(Chat):
 
     def __init__(self, chat_state_hash, team, teams, state="empty"):
         self.teams = teams
-
-        if "selected_team_name" not in st.session_state:
-            st.session_state["selected_team_name"] = None
-
-        if "comparison_teams" not in st.session_state:
-            st.session_state["comparison_teams"] = []
-
         self.selected_team = None
-        if st.session_state["selected_team_name"]:
-            self.selected_team = self.teams.to_data_point_by_team(
-                st.session_state["selected_team_name"]
-            )
-
         super().__init__(chat_state_hash, state=state)
 
     def get_input(self):
         if x := st.chat_input("Ask about a team..."):
             self.handle_input(x)
 
-    # -------------------------
-    # TEAM EXTRACTION
-    # -------------------------
+    def instruction_messages(self):
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "You are a football build-up analyst. "
+                    "Choose exactly one function based on the user's question. "
+                    "Use summarise_style for one-team style questions. "
+                    "Use summarise_performance for one-team performance, quality, strengths or weaknesses questions. "
+                    "Use compare_style for style comparisons. "
+                    "Use compare_performance for performance or quality comparisons. "
+                    "Extract team names directly from the user's message."
+                ),
+            }
+        ]
+
     def _extract_teams(self, text):
         names = self.teams.df["team"].dropna().tolist()
         found = []
@@ -733,24 +791,41 @@ class TeamChat(Chat):
             if name.lower() in text.lower():
                 found.append(name)
 
-        tokens = text.split()
-        for token in tokens:
+        for token in text.split():
             match = get_close_matches(token, names, n=1, cutoff=0.7)
             if match and match[0] not in found:
                 found.append(match[0])
 
         return list(dict.fromkeys(found))
 
-    # -------------------------
-    # PLOT
-    # -------------------------
+    def _resolve_team_names(self, team_names):
+        names = self.teams.df["team"].dropna().tolist()
+        resolved = []
+
+        for team_name in team_names:
+            if not team_name:
+                continue
+
+            exact = [name for name in names if name.lower() == team_name.lower()]
+            if exact:
+                resolved.append(exact[0])
+                continue
+
+            close = get_close_matches(team_name, names, n=1, cutoff=0.7)
+            if close:
+                resolved.append(close[0])
+
+        return list(dict.fromkeys(resolved))
+
     def _safe_df(self, metrics):
         required_columns = []
+
         for metric in metrics:
             required_columns.extend([metric, metric + "_Z", metric + "_Ranks"])
 
         required_columns = [
-            col for col in required_columns if col in self.teams.df.columns
+            column for column in required_columns
+            if column in self.teams.df.columns
         ]
 
         return self.teams.df.dropna(subset=required_columns).copy()
@@ -782,13 +857,12 @@ class TeamChat(Chat):
                 plot.annotation_text = original_annotation
 
         self.teams.df = original_df
+
         return plot
 
-    # -------------------------
-    # COMPARISON CORE LOGIC
-    # -------------------------
     def _describe_difference_size(self, delta):
         abs_delta = abs(delta)
+
         if abs_delta >= 1.5:
             return "much higher"
         if abs_delta >= 0.75:
@@ -811,10 +885,12 @@ class TeamChat(Chat):
                 if pd.isna(ref_z) or pd.isna(other_z):
                     continue
 
-                diffs.append({
-                    "metric": metric,
-                    "delta": float(ref_z - other_z),
-                })
+                diffs.append(
+                    {
+                        "metric": metric,
+                        "delta": float(ref_z - other_z),
+                    }
+                )
 
             diffs = sorted(diffs, key=lambda x: abs(x["delta"]), reverse=True)[:3]
 
@@ -823,9 +899,10 @@ class TeamChat(Chat):
                 continue
 
             sentences = []
-            for d in diffs:
-                metric_name = description_obj.write_out_team_metric(d["metric"])
-                delta = d["delta"]
+
+            for diff in diffs:
+                metric_name = description_obj.write_out_team_metric(diff["metric"])
+                delta = diff["delta"]
 
                 if delta > 0:
                     higher = reference_team.name
@@ -835,13 +912,12 @@ class TeamChat(Chat):
                     lower = reference_team.name
 
                 size = self._describe_difference_size(delta)
-
-                sentences.append(
-                    f"{higher} are {size} than {lower} in {metric_name}"
-                )
+                sentences.append(f"{higher} are {size} than {lower} in {metric_name}")
 
             sections.append(
-                f"Compared with {other_team.name}: " + "; ".join(sentences) + "."
+                f"Compared with {other_team.name}: "
+                + "; ".join(sentences)
+                + "."
             )
 
         intro = (
@@ -851,103 +927,169 @@ class TeamChat(Chat):
 
         return intro + "\n\n" + "\n\n".join(sections)
 
-    def _polish_text(self, raw_text):
+    def _summarise_style(self, teams_list):
+        display_names = {
+            "avg_passes": "Avg Passes",
+            "avg_duration": "Avg Duration (s)",
+            "build_ups_per_game": "Build-Ups / Game",
+            "prop_channel_center": "Central (%)",
+            "prop_channel_half_space_left": "Left Half-Space (%)",
+            "prop_channel_wide_left": "Left Wide (%)",
+            "prop_channel_half_space_right": "Right Half-Space (%)",
+            "prop_channel_wide_right": "Right Wide (%)",
+        }
+
+        plot = self._build_plot(
+            teams_list=teams_list,
+            metrics=self.STYLE_METRICS,
+            title=(
+                "Build-Up Style Comparison"
+                if len(teams_list) > 1
+                else f"{teams_list[0].name} – Build-Up Style"
+            ),
+            subtitle="How teams build up play (z-scores)",
+            display_names=display_names,
+            labels=["Less", "Average", "More"],
+        )
+
+        if len(teams_list) == 1:
+            text = TeamStyleDescription(teams_list[0]).synthesize_text()
+        else:
+            text = self._compare_from_metrics(
+                teams_list=teams_list,
+                metrics=self.STYLE_METRICS,
+                description_obj=TeamStyleDescription(teams_list[0]),
+            )
+
+        return plot, text
+
+    def _summarise_performance(self, teams_list):
+        display_names = {
+            "progression_to_midfield_pct": "Progression to Midfield (%)",
+            "buildup_that_ends_with_finish_pct": "Buildup Ending in Finish (%)",
+            "turnover_pct_buildup": "Turnover (%)",
+            "opp_box_entries_within_7s_after_turnover": "Opp Box Entries After Turnover",
+            "opp_shot_probability_within_7s_after_turnover": "Opp Shot Probability After Turnover",
+            "first_line_break_pct_buildup": "First Line Break (%)",
+        }
+
+        plot = self._build_plot(
+            teams_list=teams_list,
+            metrics=self.PERFORMANCE_METRICS,
+            title=(
+                "Build-Up Performance Comparison"
+                if len(teams_list) > 1
+                else f"{teams_list[0].name} – Build-Up Performance"
+            ),
+            subtitle="Effectiveness and outcomes of build-up (z-scores)",
+            display_names=display_names,
+            labels=["Worse", "Average", "Better"],
+        )
+
+        if len(teams_list) == 1:
+            text = TeamDescription(teams_list[0]).synthesize_text()
+        else:
+            text = self._compare_from_metrics(
+                teams_list=teams_list,
+                metrics=self.PERFORMANCE_METRICS,
+                description_obj=TeamStyleDescription(teams_list[0]),
+            )
+
+        return plot, text
+
+    def _run_tool(self, function_name, arguments):
+        if function_name in ["summarise_style", "summarise_performance"]:
+            team_names = self._resolve_team_names([arguments.get("team_name")])
+        else:
+            team_names = self._resolve_team_names(arguments.get("team_names", []))
+
+        if not team_names:
+            return None, "I could not identify the team. Please write the team name again."
+
+        teams_list = [
+            self.teams.to_data_point_by_team(team_name)
+            for team_name in team_names
+        ]
+
+        if function_name == "summarise_style":
+            return self._summarise_style([teams_list[0]])
+
+        if function_name == "summarise_performance":
+            return self._summarise_performance([teams_list[0]])
+
+        if len(teams_list) < 2:
+            return None, "Please include at least two teams for a comparison."
+
+        if function_name == "compare_style":
+            return self._summarise_style(teams_list)
+
+        if function_name == "compare_performance":
+            return self._summarise_performance(teams_list)
+
+        return None, "I could not route the question to a valid analysis function."
+
+    def handle_input(self, input):
+        self.messages_to_display.append({"role": "user", "content": input})
+
         client = OpenAI(api_key=GPT_KEY, base_url=GPT_BASE)
 
-        res = client.responses.create(
+        messages = self.instruction_messages()
+        messages.append({"role": "user", "content": input})
+
+        response = client.responses.create(
+            model=GPT_CHAT_MODEL,
+            input=messages,
+            tools=self.tools,
+            tool_choice="auto",
+        )
+
+        function_call = next(
+            (item for item in response.output if item.type == "function_call"),
+            None,
+        )
+
+        if function_call is None:
+            teams_found = self._extract_teams(input)
+
+            if not teams_found:
+                self.messages_to_display.append(
+                    {
+                        "role": "assistant",
+                        "content": "Which team would you like to analyse?",
+                    }
+                )
+                return
+
+            fallback_name = "compare_performance" if len(teams_found) > 1 else "summarise_performance"
+            fallback_args = (
+                {"team_names": teams_found}
+                if len(teams_found) > 1
+                else {"team_name": teams_found[0]}
+            )
+
+            plot, tool_text = self._run_tool(fallback_name, fallback_args)
+        else:
+            tool_args = json.loads(function_call.arguments)
+            plot, tool_text = self._run_tool(function_call.name, tool_args)
+
+        final = client.responses.create(
             model=GPT_CHAT_MODEL,
             input=[
                 {
                     "role": "system",
-                    "content": "Rewrite into 2-3 fluent football analysis sentences. Keep meaning.",
+                    "content": (
+                        "Rewrite the provided analysis into 2-3 natural, fluent football analysis sentences. "
+                        "Keep the meaning and the metric-based differences. "
+                        "Do not add information that is not provided."
+                    ),
                 },
-                {"role": "user", "content": raw_text},
+                {"role": "user", "content": tool_text},
             ],
         )
-        return res.output_text
 
-    # -------------------------
-    # STYLE
-    # -------------------------
-    def _summarise_style(self, teams_list):
-        plot = self._build_plot(
-            teams_list,
-            self.STYLE_METRICS,
-            "Build-Up Style Comparison" if len(teams_list) > 1 else f"{teams_list[0].name} Style",
-            "Style (z-scores)"
+        if plot is not None:
+            self.messages_to_display.append({"role": "assistant", "content": plot})
+
+        self.messages_to_display.append(
+            {"role": "assistant", "content": final.output_text}
         )
-
-        if len(teams_list) == 1:
-            text = TeamStyleDescription(teams_list[0]).stream_gpt(stream=True)
-        else:
-            raw = self._compare_from_metrics(
-                teams_list,
-                self.STYLE_METRICS,
-                TeamStyleDescription(teams_list[0])
-            )
-            text = self._polish_text(raw)
-
-        return plot, text
-
-    # -------------------------
-    # PERFORMANCE 
-    # -------------------------
-    def _summarise_performance(self, teams_list):
-        plot = self._build_plot(
-            teams_list,
-            self.PERFORMANCE_METRICS,
-            "Build-Up Performance Comparison" if len(teams_list) > 1 else f"{teams_list[0].name} Performance",
-            "Performance (z-scores)"
-        )
-
-        if len(teams_list) == 1:
-            text = TeamDescription(teams_list[0]).stream_gpt(stream=True)
-        else:
-            raw = self._compare_from_metrics(
-                teams_list,
-                self.PERFORMANCE_METRICS,
-                TeamStyleDescription(teams_list[0])  # reuse for naming
-            )
-            text = self._polish_text(raw)
-
-        return plot, text
-
-    # -------------------------
-    # MAIN
-    # -------------------------
-    def handle_input(self, input):
-        self.messages_to_display.append({"role": "user", "content": input})
-
-        teams_found = self._extract_teams(input)
-
-        if teams_found:
-            st.session_state["comparison_teams"] = teams_found
-            st.session_state["selected_team_name"] = teams_found[0]
-            self.selected_team = self.teams.to_data_point_by_team(teams_found[0])
-
-        if self.selected_team is None:
-            self.messages_to_display.append(
-                {"role": "assistant", "content": "Which team would you like to analyse?"}
-            )
-            return
-
-        teams_list = [
-            self.teams.to_data_point_by_team(t)
-            for t in st.session_state["comparison_teams"]
-        ]
-
-        query = input.lower()
-
-        if "compare" in query or len(teams_list) > 1:
-            if "style" in query:
-                plot, text = self._summarise_style(teams_list)
-            else:
-                plot, text = self._summarise_performance(teams_list)
-        else:
-            if "style" in query:
-                plot, text = self._summarise_style([self.selected_team])
-            else:
-                plot, text = self._summarise_performance([self.selected_team])
-
-        self.messages_to_display.append({"role": "assistant", "content": plot})
-        self.messages_to_display.append({"role": "assistant", "content": text})

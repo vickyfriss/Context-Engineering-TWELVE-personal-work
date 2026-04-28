@@ -89,15 +89,16 @@ teams.calculate_statistics(
     metrics=metrics,
     negative_metrics=negative_metrics,
 )
-for metric in style_metrics:
-    rank_col = metric + "_Ranks"
-    z_col = metric + "_Z"
+#for metric in style_metrics:
+#    rank_col = metric + "_Ranks"
+#    z_col = metric + "_Z"
+#
+#    if rank_col in teams.df.columns:
+#        st.write(metric, "NaN ranks:", teams.df[rank_col].isna().sum())
+#
+#    if z_col in teams.df.columns:
+#        st.write(metric, "NaN z-scores:", teams.df[z_col].isna().sum())
 
-    if rank_col in teams.df.columns:
-        st.write(metric, "NaN ranks:", teams.df[rank_col].isna().sum())
-
-    if z_col in teams.df.columns:
-        st.write(metric, "NaN z-scores:", teams.df[z_col].isna().sum())
 # -------------------------------
 # Show dataset
 # -------------------------------
