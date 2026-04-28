@@ -753,8 +753,6 @@ class TeamDescription(Description):
 
     def write_out_team_metric(self, metric: str) -> str:
         metric_map = {
-            #"buildup_to_create_pct": "build-ups that progress into midfield without using a direct long ball",
-            #"buildup_to_direct_pct": "direct build-up progression",
             "first_line_break_pct_buildup": "build-ups that break the first defensive line of pressure",
             "progression_to_midfield_pct": "build-ups that progress into midfield",
             "buildup_that_ends_with_finish_pct": "build-ups that progress into a finish phase",
@@ -768,11 +766,6 @@ class TeamDescription(Description):
     def synthesize_text(self):
         team = self.team
         metrics = self.team.relevant_metrics
-
-        style_metrics = [
-            "buildup_to_create_pct",
-            "buildup_to_direct_pct",
-        ]
 
         quality_metrics = [
             "first_line_break_pct_buildup",
@@ -788,7 +781,6 @@ class TeamDescription(Description):
             f"Here is a statistical description of {team.name}'s build-up play, compared to other teams\n\n")
 
         metric_groups = {
-            "style": [metric for metric in metrics if metric in style_metrics],
             "quality": [metric for metric in metrics if metric in quality_metrics],
         }
 
@@ -863,15 +855,18 @@ class TeamStyleDescription(Description):
         words=["very high", "high", "average", "low", "very low"],
     ):
         return sentences.describe(thresholds, words, value)
-
     def write_out_team_metric(self, metric: str) -> str:
         metric_map = {
-            "prop_direct": "buildup ends with long pass",
-            "prop_goalkeeper_involved": "goalkeeper involved in the buildup",
-            "avg_successful_passes": "average successful passes in the buildup",
-            "avg_phase_duration_seconds": "average phase duration",
-            "avg_players_involved": "average number of players involved",
-            "build_ups_per_game": "number of build-Ups per Game",            
+            #"prop_gk_involved": "goalkeeper involvement in build-up",
+            "avg_passes": "average number of passes in build-up",
+            "avg_duration": "average build-up phase duration",
+            #"avg_players_involved": "average number of players involved in build-up",
+            "build_ups_per_game": "number of build-ups per game",
+            "prop_channel_center": "central channel usage in build-up",
+            "prop_channel_half_space_left": "left half-space usage in build-up",
+            "prop_channel_wide_left": "left wide channel usage in build-up",
+            "prop_channel_half_space_right": "right half-space usage in build-up",
+            "prop_channel_wide_right": "right wide channel usage in build-up",
         }
         return metric_map.get(metric, metric.replace("_", " "))
 
@@ -880,12 +875,16 @@ class TeamStyleDescription(Description):
         metrics = self.team.relevant_metrics
 
         style_metrics = [
-            "prop_direct",
-            "prop_goalkeeper_involved",
-            "avg_successful_passes",
-            "avg_phase_duration_seconds",
-            "avg_players_involved",
-            "build_ups_per_game"
+            #"prop_gk_involved",
+            "avg_passes",
+            "avg_duration",
+            #"avg_players_involved",
+            "build_ups_per_game",
+            "prop_channel_center",
+            "prop_channel_half_space_left",
+            "prop_channel_wide_left",
+            "prop_channel_half_space_right",
+            "prop_channel_wide_right",
         ]
 
         

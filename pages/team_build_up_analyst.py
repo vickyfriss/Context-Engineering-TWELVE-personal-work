@@ -40,10 +40,10 @@ metrics = [
     "opp_shot_probability_within_7s_after_turnover",
     "first_line_break_pct_buildup",
     # STYLE
-    "prop_gk_involved",
+    #"prop_gk_involved",
     "avg_passes",
     "avg_duration",
-    "avg_players_involved",
+    #"avg_players_involved",
     "build_ups_per_game",
     "prop_channel_center",
     "prop_channel_half_space_left",
@@ -53,10 +53,10 @@ metrics = [
 ]
 
 style_metrics = [
-    "prop_gk_involved",
+    #"prop_gk_involved",
     "avg_passes",
     "avg_duration",
-    "avg_players_involved",
+    #"avg_players_involved",
     "build_ups_per_game",
     "prop_channel_center",
     "prop_channel_half_space_left",
@@ -89,7 +89,15 @@ teams.calculate_statistics(
     metrics=metrics,
     negative_metrics=negative_metrics,
 )
+for metric in style_metrics:
+    rank_col = metric + "_Ranks"
+    z_col = metric + "_Z"
 
+    if rank_col in teams.df.columns:
+        st.write(metric, "NaN ranks:", teams.df[rank_col].isna().sum())
+
+    if z_col in teams.df.columns:
+        st.write(metric, "NaN z-scores:", teams.df[z_col].isna().sum())
 # -------------------------------
 # Show dataset
 # -------------------------------
