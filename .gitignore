@@ -23,6 +23,7 @@ secrets.toml
 match_periods.parquet
 matches_clean.parquet
 players_match.parquet
+matchdata/
 /data/dynamic_events_pl_24/
 data/dynamic_events_pl_24/
 venv/
