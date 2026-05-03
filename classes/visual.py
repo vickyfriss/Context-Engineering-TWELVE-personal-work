@@ -486,3 +486,120 @@ class DistributionPlotPersonality(Visual):
         title = f"Evaluation of {person.name}"
         subtitle = "Based on Big Five scores"
         self.add_title(title, subtitle)
+
+
+class LaneHeatmap(Visual):
+    """A compact heatmap-like visual for lane/channel usage (teams)."""
+
+    def __init__(self, columns, display_names=None, *args, **kwargs):
+        self.columns = columns
+        self.display_names = display_names or {}
+        super().__init__(*args, **kwargs)
+    def _format_value(self, raw):
+        try:
+            v = float(raw)
+        except Exception:
+            v = 0.0
+        # If value seems fractional (0..1) convert to percent for display
+        if abs(v) <= 1.0:
+            return v * 100.0
+        return v
+
+    def _ordered_columns(self):
+        """Return columns ordered as: Left Wide, Left Half-Space, Center, Right Half-space, Right Wide."""
+        preferred = [
+            "prop_channel_wide_left",
+            "prop_channel_half_space_left",
+            "prop_channel_center",
+            "prop_channel_half_space_right",
+            "prop_channel_wide_right",
+        ]
+        # Preserve only those present in self.columns and in preferred order
+        return [c for c in preferred if c in self.columns]
+
+    def add_team(self, team: Team):
+        """Add a single team's lane usage as a horizontal bar chart."""
+        cols = self._ordered_columns()
+        x_labels = [self.display_names.get(c, c) for c in cols]
+
+        values = []
+        for col in cols:
+            raw = team.ser_metrics.get(col, team.ser_metrics.get(col + "_Z", 0.0))
+            pct = self._format_value(raw)
+            values.append(pct)
+
+        # Use white background for this plot
+        self.fig.update_layout(paper_bgcolor="white", plot_bgcolor="white")
+        self.fig.update_xaxes(tickfont={"color": "black"})
+        self.fig.update_yaxes(tickfont={"color": "black"})
+
+        # Create vertical bars left-to-right
+        self.fig.add_trace(
+            go.Bar(
+                x=x_labels,
+                y=values,
+                marker={"color": rgb_to_color(self.bright_green, 0.8)},
+                hovertemplate="%{x}: %{y:.1f}%<extra></extra>",
+                name=team.name,
+                showlegend=True,
+            )
+        )
+
+        # Adjust y-axis to percentage if values look like percents
+        max_val = max(values) if values else 0
+        y_max = max(100, (int(max_val / 10) + 1) * 10)
+        self.fig.update_yaxes(range=[0, y_max], title_text="% Usage", zeroline=True)
+    
+    def add_league_average(self, teams: TeamStats):
+        """Draw league-average markers (diamond) with labels above the marker."""
+        cols = self._ordered_columns()
+        x_labels = [self.display_names.get(c, c) for c in cols]
+        df = teams.df
+
+        values = []
+        for col in cols:
+            if col in df.columns:
+                v = df[col].mean()
+            else:
+                v = 0.0
+            values.append(self._format_value(v))
+
+        # Ensure there is enough headroom for text above markers
+        current_max = max(values) if values else 0
+        y_max = max(100, (int(current_max / 10) + 2) * 10)  # + extra space
+        self.fig.update_yaxes(range=[0, y_max])
+
+        # Optional dashed line (no legend to avoid duplicates)
+        self.fig.add_trace(
+            go.Scatter(
+                x=x_labels,
+                y=values,
+                mode="lines",
+                line={"dash": "dash", "color": rgb_to_color(self.gray, 0.9)},
+                showlegend=False,
+                hoverinfo="skip",
+            )
+        )
+
+        # Diamond markers + text ABOVE the marker
+        self.fig.add_trace(
+            go.Scatter(
+                x=x_labels,
+                y=values,
+                mode="markers+text",
+                marker={
+                    "symbol": "diamond",
+                    "size": 12,
+                    "color": rgb_to_color(self.gray, 0.9),
+                    "line": {"width": 1, "color": "black"},
+                },
+                text=[f"{v:.1f}%" for v in values],
+                textposition="top center",  # 👈 key fix
+                textfont={"color": "black", "size": 11},
+                name="League average",
+                showlegend=True,
+                hovertemplate="%{x}: %{y:.1f}%<extra>League average</extra>",
+            )
+        )
+
+ 

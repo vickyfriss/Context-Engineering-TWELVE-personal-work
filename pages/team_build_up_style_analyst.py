@@ -111,6 +111,8 @@ if chat.state == "empty":
     style_plot.add_players(teams, metrics=style_metrics)
     style_plot.add_player(team, len(teams.df), metrics=style_metrics)
 
+
+
 #    # QUALITY PLOT
 #   quality_plot = DistributionPlot(
 #        columns=quality_metrics[::-1],
@@ -139,6 +141,11 @@ if chat.state == "empty":
         visible=False,
     )
     chat.add_message(style_plot)
+    chat.add_message(lane_heatmap)
+    # lane summary
+    lane_description = TeamLaneDescription(team)
+    lane_summary = lane_description.stream_gpt(stream=True)
+    chat.add_message(lane_summary)
     #chat.add_message(quality_plot)
     chat.add_message(summary)
 

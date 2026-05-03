@@ -857,10 +857,10 @@ class TeamStyleDescription(Description):
         return sentences.describe(thresholds, words, value)
     def write_out_team_metric(self, metric: str) -> str:
         metric_map = {
-            #"prop_gk_involved": "goalkeeper involvement in build-up",
+            "prop_gk_involved": "goalkeeper involvement in build-up",
             "avg_passes": "average number of passes in build-up",
             "avg_duration": "average build-up phase duration",
-            #"avg_players_involved": "average number of players involved in build-up",
+            "avg_players_involved": "average number of players involved in build-up",
             "build_ups_per_game": "number of build-ups per game",
             "build_up_carries": "build-up carries beating an opponent under pressure",
             "buildup_to_direct_pct": "direct passes %",
@@ -877,18 +877,18 @@ class TeamStyleDescription(Description):
         metrics = self.team.relevant_metrics
 
         style_metrics = [
-            #"prop_gk_involved",
+            "prop_gk_involved",
             "avg_passes",
             "avg_duration",
-            #"avg_players_involved",
+            "avg_players_involved",
             "build_ups_per_game",
             "build_up_carries",
             "buildup_to_direct_pct",
-            "prop_channel_center",
-            "prop_channel_half_space_left",
-            "prop_channel_wide_left",
-            "prop_channel_half_space_right",
-            "prop_channel_wide_right",
+            #"prop_channel_center",
+           # "prop_channel_half_space_left",
+            #"prop_channel_wide_left",
+            #"prop_channel_half_space_right",
+            #"prop_channel_wide_right",
         ]
 
         
@@ -922,5 +922,97 @@ class TeamStyleDescription(Description):
             #"Sentence 2: key strengths based on the build-up quality perofmrnace metrics. "
             #Sentence 3: weaknesses or average areas based on the metrics. "
             #"Sentence 4: a clear comparison with build-up performance-metrics to other teams."
+        )
+        return [{"role": "user", "content": prompt}]
+
+
+class TeamLaneDescription(Description):
+    output_token_limit = 140
+
+    @property
+    def gpt_examples_path(self):
+        return f"{self.gpt_examples_base}/team_buildup_style.xlsx"
+
+    @property
+    def describe_paths(self):
+        return [f"{self.describe_base}/team_buildup_style.xlsx"]
+
+    def __init__(self, team: Team):
+        self.team = team
+        super().__init__()
+
+    def get_intro_messages(self) -> List[Dict[str, str]]:
+        intro = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a football build-up analyst. "
+                    "You provide succinct, data-grounded explanations about how teams use pitch channels and lanes in build-up. "
+                    "You must base your answers only on the data description and the provided Q/A context."
+                ),
+            },
+        ]
+        if len(self.describe_paths) > 0:
+            intro += [
+                {
+                    "role": "user",
+                    "content": "First, could you answer some questions about the build-up lane metrics for me?",
+                },
+                {"role": "assistant", "content": "Sure!"},
+            ]
+        return intro
+
+    def describe_level_style(
+        self,
+        value,
+        thresholds=[1.5, 0.5, -0.5, -1.5],
+        words=["very high", "high", "average", "low", "very low"],
+    ):
+        return sentences.describe(thresholds, words, value)
+
+    def write_out_team_metric(self, metric: str) -> str:
+        metric_map = {
+            "prop_channel_center": "central channel usage",
+            "prop_channel_half_space_left": "left half-space usage",
+            "prop_channel_wide_left": "left wide channel usage",
+            "prop_channel_half_space_right": "right half-space usage",
+            "prop_channel_wide_right": "right wide channel usage",
+        }
+        return metric_map.get(metric, metric.replace("_", " "))
+
+    def synthesize_text(self):
+        team = self.team
+        metrics = self.team.relevant_metrics
+
+        lane_metrics = [
+            "prop_channel_center",
+            "prop_channel_half_space_left",
+            "prop_channel_wide_left",
+            "prop_channel_half_space_right",
+            "prop_channel_wide_right",
+        ]
+
+        description = (
+            f"Here is a statistical description of {team.name}'s lane usage in build-up, compared to other teams\n\n"
+        )
+
+        metric_groups = {"lanes": [m for m in metrics if m in lane_metrics]}
+
+        for group_name, group_metrics in metric_groups.items():
+            for metric in group_metrics:
+                z_key = metric + "_Z"
+                z_value = team.ser_metrics.get(z_key, team.ser_metrics.get(metric, 0.0))
+
+                description += f"{team.name} was "
+                description += self.describe_level_style(z_value)
+                description += " in " + self.write_out_team_metric(metric)
+                description += " compared to other teams. "
+
+        return description
+
+    def get_prompt_messages(self) -> List[Dict[str, str]]:
+        prompt = (
+            "Please use the statistical description enclosed with ``` to give a concise, 2-3 sentence summary of the team's lane/channel usage. "
+            "Focus on which lanes are used relatively more or less and how this compares to other teams."
         )
         return [{"role": "user", "content": prompt}]

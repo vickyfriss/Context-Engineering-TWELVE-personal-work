@@ -4,7 +4,7 @@ from itertools import groupby
 from types import GeneratorType
 import pandas as pd
 import json
-from classes.description import TeamDescription, TeamStyleDescription
+from classes.description import TeamDescription, TeamStyleDescription, TeamLaneDescription
 from classes.embeddings import TeamEmbeddings
 
 from settings import USE_GEMINI
@@ -38,7 +38,7 @@ from classes.description import (
 )
 from classes.embeddings import PlayerEmbeddings, CountryEmbeddings, PersonEmbeddings
 
-from classes.visual import Visual, DistributionPlot, DistributionPlotPersonality
+from classes.visual import Visual, DistributionPlot, DistributionPlotPersonality, LaneHeatmap
 
 import utils.sentences as sentences
 from utils.gemini import convert_messages_format
@@ -736,6 +736,33 @@ class TeamChat(Chat):
                 "required": ["team_names"],
             },
         },
+        {
+            "type": "function",
+            "name": "summarise_lanes",
+            "description": "Summarise one team's lane/channel usage in build-up.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "team_name": {"type": "string"}
+                },
+                "required": ["team_name"],
+            },
+        },
+        {
+            "type": "function",
+            "name": "compare_lanes",
+            "description": "Compare lane/channel usage between two or more teams.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "team_names": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    }
+                },
+                "required": ["team_names"],
+            },
+        },
     ]
 
     STYLE_METRICS = [
@@ -744,6 +771,15 @@ class TeamChat(Chat):
         "build_ups_per_game",
         "build_up_carries",
         "buildup_to_direct_pct",
+        "prop_gk_involved",
+        #"prop_channel_center",
+        #"prop_channel_half_space_left",
+        #"prop_channel_wide_left",
+        #"prop_channel_half_space_right",
+        #"prop_channel_wide_right",
+    ]
+
+    LANE_METRICS = [
         "prop_channel_center",
         "prop_channel_half_space_left",
         "prop_channel_wide_left",
@@ -972,6 +1008,40 @@ class TeamChat(Chat):
 
         return plot, text
 
+    def _summarise_lanes(self, teams_list):
+        display_names = {
+            "prop_channel_center": "Central (%)",
+            "prop_channel_half_space_left": "Left Half-Space (%)",
+            "prop_channel_wide_left": "Left Wide (%)",
+            "prop_channel_half_space_right": "Right Half-Space (%)",
+            "prop_channel_wide_right": "Right Wide (%)",
+        }
+
+        # Build lane heatmap
+        plot = LaneHeatmap(columns=self.LANE_METRICS, display_names=display_names)
+
+        # Add each team as a row
+        for team in teams_list:
+            plot.add_team(team)
+
+        # Add league average markers/lines
+        try:
+            plot.add_league_average(self.teams)
+        except Exception:
+            pass
+
+        if len(teams_list) == 1:
+            text = TeamLaneDescription(teams_list[0]).synthesize_text()
+        else:
+            # Reuse comparison helper but with lane metrics
+            text = self._compare_from_metrics(
+                teams_list=teams_list,
+                metrics=self.LANE_METRICS,
+                description_obj=TeamLaneDescription(teams_list[0]),
+            )
+
+        return plot, text
+
     def _summarise_performance(self, teams_list):
         display_names = {
             "progression_to_midfield_pct": "Progression to Midfield (%)",
@@ -1007,7 +1077,7 @@ class TeamChat(Chat):
         return plot, text
 
     def _run_tool(self, function_name, arguments):
-        if function_name in ["summarise_style", "summarise_performance"]:
+        if function_name in ["summarise_style", "summarise_performance", "summarise_lanes"]:
             team_names = self._resolve_team_names([arguments.get("team_name")])
         else:
             team_names = self._resolve_team_names(arguments.get("team_names", []))
@@ -1023,6 +1093,9 @@ class TeamChat(Chat):
         if function_name == "summarise_style":
             return self._summarise_style([teams_list[0]])
 
+        if function_name == "summarise_lanes":
+            return self._summarise_lanes([teams_list[0]])
+
         if function_name == "summarise_performance":
             return self._summarise_performance([teams_list[0]])
 
@@ -1031,6 +1104,9 @@ class TeamChat(Chat):
 
         if function_name == "compare_style":
             return self._summarise_style(teams_list)
+
+        if function_name == "compare_lanes":
+            return self._summarise_lanes(teams_list)
 
         if function_name == "compare_performance":
             return self._summarise_performance(teams_list)
