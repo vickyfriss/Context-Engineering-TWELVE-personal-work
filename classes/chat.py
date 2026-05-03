@@ -239,6 +239,8 @@ class Chat:
         # Add the returned value to the messages.
         self.messages_to_display.append(message)
 
+
+
     def display_content(self, content):
         """
         Displays the content of a message in streamlit. Handles plots, strings, and StreamingMessages.
@@ -1096,45 +1098,77 @@ class TeamChat(Chat):
         return plot, text
     
     # ---------------- _run_tool ----------------
-    def _run_tool(self, function_name, arguments):
+    def _run_tool(self, function_name, arguments, is_compare_intent=False):
+        """
+        Executes the correct analysis function and manages session state.
+
+        This is the SINGLE SOURCE OF TRUTH for:
+        - last_analysis_type
+        - selected_team_name
+        - comparison_teams
+        """
+
+        # ---------------- SET ANALYSIS TYPE (SINGLE SOURCE OF TRUTH) ----------------
+        if function_name in ["summarise_style", "compare_style"]:
+            st.session_state["last_analysis_type"] = "style"
+
+        elif function_name in ["summarise_performance", "compare_performance"]:
+            st.session_state["last_analysis_type"] = "performance"
+
+        elif function_name in ["summarise_lanes", "compare_lanes"]:
+            st.session_state["last_analysis_type"] = "lanes"
+
+        # ---------------- RESOLVE TEAM NAMES ----------------
         if function_name in ["summarise_style", "summarise_performance", "summarise_lanes"]:
             team_names = self._resolve_team_names([arguments.get("team_name")])
         else:
             team_names = self._resolve_team_names(arguments.get("team_names", []))
 
-        # 🔥 PATCH 1: FIX STATE LOGIC
-        if team_names:
-
-            # CASE 1: single team → becomes main team
-            if len(team_names) == 1:
-                st.session_state["selected_team_name"] = team_names[0]
-                st.session_state["comparison_teams"] = [team_names[0]]
-
-            # CASE 2: multiple teams → keep main, add others
-            else:
-                main = st.session_state["selected_team_name"]
-
-                if main is None:
-                    main = team_names[0]
-                    st.session_state["selected_team_name"] = main
-
-                others = [t for t in team_names if t != main]
-                st.session_state["comparison_teams"] = [main] + others
-
-            # update runtime selected team
-            self.selected_team = self.teams.to_data_point_by_team(
-                st.session_state["selected_team_name"]
-            )
-
         if not team_names:
             return None, "I could not identify the team. Please write the team name again."
 
-        # 🔥 PATCH 2: ALWAYS USE STORED COMPARISON TEAMS
+        # ---------------- STATE MANAGEMENT ----------------
+        current_main = st.session_state.get("selected_team_name")
+        current_comparison = st.session_state.get("comparison_teams", [])
+
+        if len(team_names) > 1:
+            if is_compare_intent:
+                # Explicit comparison → override fully
+                st.session_state["selected_team_name"] = team_names[0]
+                st.session_state["comparison_teams"] = team_names
+            else:
+                # Implicit multi-team mention → keep main, extend comparison
+                if current_main:
+                    st.session_state["comparison_teams"] = list(
+                        dict.fromkeys([current_main] + team_names)
+                    )
+                else:
+                    st.session_state["selected_team_name"] = team_names[0]
+                    st.session_state["comparison_teams"] = team_names
+
+        else:
+            new_team = team_names[0]
+
+            if not is_compare_intent:
+                # Hard reset → single team focus
+                st.session_state["selected_team_name"] = new_team
+                st.session_state["comparison_teams"] = [new_team]
+            else:
+                # Add to comparison only
+                if new_team not in current_comparison:
+                    st.session_state["comparison_teams"] = current_comparison + [new_team]
+
+        # ---------------- BUILD TEAM OBJECTS ----------------
         teams_list = [
             self.teams.to_data_point_by_team(team_name)
             for team_name in st.session_state["comparison_teams"]
         ]
 
+        if not teams_list:
+            return None, "No valid team data found."
+
+        # ---------------- ROUTING ----------------
+        # Single team
         if function_name == "summarise_style":
             return self._summarise_style([teams_list[0]])
 
@@ -1144,6 +1178,7 @@ class TeamChat(Chat):
         if function_name == "summarise_performance":
             return self._summarise_performance([teams_list[0]])
 
+        # Require comparison
         if len(teams_list) < 2:
             return None, "Please include at least two teams for a comparison."
 
@@ -1155,17 +1190,8 @@ class TeamChat(Chat):
 
         if function_name == "compare_performance":
             return self._summarise_performance(teams_list)
-        
-        # PATCH: store last analysis type
-        if function_name in ["summarise_style", "compare_style"]:
-            st.session_state["last_analysis_type"] = "style"
 
-        elif function_name in ["summarise_performance", "compare_performance"]:
-            st.session_state["last_analysis_type"] = "performance"
-
-        elif function_name in ["summarise_lanes", "compare_lanes"]:
-            st.session_state["last_analysis_type"] = "lanes"
-
+        # ---------------- FALLBACK ----------------
         return None, "I could not route the question to a valid analysis function."
 
     def handle_input(self, input):
@@ -1188,11 +1214,15 @@ class TeamChat(Chat):
             None,
         )
 
-        # 🔥 FORCE INTENT FROM USER TEXT
+        # ---------------- INTENT DETECTION ----------------
         query = input.lower()
         forced_function = None
 
-        # 🔥 explicit intent (strong signal)
+        is_compare_intent = any(word in query for word in [
+            "compare", "vs", "versus", "against", "between", "with"
+        ])
+
+        # Strong signals
         if "style" in query:
             forced_function = "compare_style" if len(st.session_state["comparison_teams"]) > 1 else "summarise_style"
 
@@ -1202,7 +1232,7 @@ class TeamChat(Chat):
         elif "lane" in query or "channel" in query:
             forced_function = "compare_lanes" if len(st.session_state["comparison_teams"]) > 1 else "summarise_lanes"
 
-        # 🔥 NEW: implicit intent (weak signal like "compare to...")
+        # Weak signal (context-based)
         elif "compare" in query:
             last = st.session_state.get("last_analysis_type")
 
@@ -1213,82 +1243,79 @@ class TeamChat(Chat):
             elif last == "lanes":
                 forced_function = "compare_lanes"
 
-        # ---------------- handle_input ----------------
-        if forced_function is not None:
-
-            # 🔥 ALWAYS extract teams from current input first
+        # ---------------- ROUTING ----------------
+        if forced_function:
             teams_found = self._extract_teams(input)
 
             if teams_found:
-                if len(teams_found) == 1:
-                    tool_args = {"team_name": teams_found[0]}
+                if is_compare_intent:
+                    current = st.session_state.get("comparison_teams", [])
+                    merged = list(dict.fromkeys(current + teams_found)) if current else teams_found
+                    tool_args = {"team_names": merged}
                 else:
-                    tool_args = {"team_names": teams_found}
+                    tool_args = (
+                        {"team_name": teams_found[0]}
+                        if len(teams_found) == 1
+                        else {"team_names": teams_found}
+                    )
             else:
-                # fallback to stored context
+                # fallback to state
                 if "compare" in forced_function:
-                    tool_args = {"team_names": st.session_state["comparison_teams"]}
+                    tool_args = {"team_names": st.session_state.get("comparison_teams", [])}
                 else:
-                    tool_args = {"team_name": st.session_state["selected_team_name"]}
+                    tool_args = {"team_name": st.session_state.get("selected_team_name")}
 
-            plot, tool_text = self._run_tool(forced_function, tool_args)
+            plot, tool_text = self._run_tool(forced_function, tool_args, is_compare_intent)
 
-        elif function_call is None:
-            
+        elif function_call:
+            tool_args = json.loads(function_call.arguments)
+
+            stored_teams = st.session_state.get("comparison_teams", [])
+
+            # Auto-upgrade to comparison
+            if (
+                function_call.name in ["summarise_style", "summarise_performance", "summarise_lanes"]
+                and len(stored_teams) > 1
+            ):
+                mapping = {
+                    "summarise_style": "compare_style",
+                    "summarise_performance": "compare_performance",
+                    "summarise_lanes": "compare_lanes",
+                }
+                function_name = mapping[function_call.name]
+                tool_args = {"team_names": stored_teams}
+            else:
+                function_name = function_call.name
+
+            plot, tool_text = self._run_tool(function_name, tool_args, is_compare_intent)
+
+        else:
+            # FINAL fallback
             teams_found = self._extract_teams(input)
 
-            # 🔥 PATCH 3: FIX "their" BEHAVIOUR
-            if not teams_found:
-                if st.session_state["selected_team_name"]:
-                    teams_found = [st.session_state["selected_team_name"]]
+            if not teams_found and st.session_state.get("selected_team_name"):
+                teams_found = [st.session_state["selected_team_name"]]
 
             if not teams_found:
-                self.messages_to_display.append(
-                    {
-                        "role": "assistant",
-                        "content": "Which team would you like to analyse?",
-                    }
-                )
+                self.messages_to_display.append({
+                    "role": "assistant",
+                    "content": "Which team would you like to analyse?",
+                })
                 return
 
-            fallback_name = "compare_performance" if len(teams_found) > 1 else "summarise_performance"
+            fallback_name = (
+                "compare_performance" if len(teams_found) > 1 else "summarise_performance"
+            )
+
             fallback_args = (
                 {"team_names": teams_found}
                 if len(teams_found) > 1
                 else {"team_name": teams_found[0]}
             )
 
-            plot, tool_text = self._run_tool(fallback_name, fallback_args)
+            plot, tool_text = self._run_tool(fallback_name, fallback_args, is_compare_intent)
 
-        else:
-            tool_args = json.loads(function_call.arguments)
-
-            # 🔥 PATCH 4: FORCE COMPARISON IF CONTEXT HAS MULTIPLE TEAMS
-            stored_teams = st.session_state.get("comparison_teams", [])
-
-            if (
-                function_call.name in ["summarise_style", "summarise_performance", "summarise_lanes"]
-                and len(stored_teams) > 1
-            ):
-                # upgrade to comparison automatically
-                if function_call.name == "summarise_style":
-                    function_name = "compare_style"
-                    tool_args = {"team_names": stored_teams}
-
-                elif function_call.name == "summarise_performance":
-                    function_name = "compare_performance"
-                    tool_args = {"team_names": stored_teams}
-
-                elif function_call.name == "summarise_lanes":
-                    function_name = "compare_lanes"
-                    tool_args = {"team_names": stored_teams}
-
-            else:
-                function_name = function_call.name
-
-            plot, tool_text = self._run_tool(function_name, tool_args)
-
-
+        # ---------------- FINAL RESPONSE ----------------
         final = client.responses.create(
             model=GPT_CHAT_MODEL,
             input=[
