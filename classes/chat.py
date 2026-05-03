@@ -815,6 +815,9 @@ class TeamChat(Chat):
             )
 
         super().__init__(chat_state_hash, state=state)
+
+        if "last_analysis_type" not in st.session_state:
+            st.session_state["last_analysis_type"] = None
         
 
     def get_input(self):
@@ -1152,6 +1155,16 @@ class TeamChat(Chat):
 
         if function_name == "compare_performance":
             return self._summarise_performance(teams_list)
+        
+        # PATCH: store last analysis type
+        if function_name in ["summarise_style", "compare_style"]:
+            st.session_state["last_analysis_type"] = "style"
+
+        elif function_name in ["summarise_performance", "compare_performance"]:
+            st.session_state["last_analysis_type"] = "performance"
+
+        elif function_name in ["summarise_lanes", "compare_lanes"]:
+            st.session_state["last_analysis_type"] = "lanes"
 
         return None, "I could not route the question to a valid analysis function."
 
@@ -1177,9 +1190,9 @@ class TeamChat(Chat):
 
         # 🔥 FORCE INTENT FROM USER TEXT
         query = input.lower()
-
         forced_function = None
 
+        # 🔥 explicit intent (strong signal)
         if "style" in query:
             forced_function = "compare_style" if len(st.session_state["comparison_teams"]) > 1 else "summarise_style"
 
@@ -1188,6 +1201,17 @@ class TeamChat(Chat):
 
         elif "lane" in query or "channel" in query:
             forced_function = "compare_lanes" if len(st.session_state["comparison_teams"]) > 1 else "summarise_lanes"
+
+        # 🔥 NEW: implicit intent (weak signal like "compare to...")
+        elif "compare" in query:
+            last = st.session_state.get("last_analysis_type")
+
+            if last == "style":
+                forced_function = "compare_style"
+            elif last == "performance":
+                forced_function = "compare_performance"
+            elif last == "lanes":
+                forced_function = "compare_lanes"
 
         # ---------------- handle_input ----------------
         if forced_function is not None:
