@@ -683,6 +683,30 @@ class PersonChat(Chat):
 
 
 class TeamChat(Chat):
+
+    DISPLAY_NAMES = {
+        "buildup_to_create_pct": "Buildup to Create (%)",
+        "buildup_to_direct_pct": "Buildup to Direct (%)",
+        "progression_to_midfield_pct": "Progression to Midfield (%)",
+        "buildup_that_ends_with_finish_pct": "Buildup Ending in Finish Phase (%)",
+        "first_line_break_pct_buildup": "1st Line Break (%)",
+        "second_last_line_break_pct_buildup": "2nd Last Line Break (%)",
+        "turnover_pct_buildup": "Turnover (%)",
+        "opp_box_entries_within_7s_after_turnover": "Opp. Box Entries in 7s after Turnover",
+        "opp_shot_probability_within_7s_after_turnover": "Opp. Shot Prob in 7s after Turnover",
+        "prop_gk_involved": "Goalkeeper Involvement (%)",
+        "avg_passes": "Avg Passes (#)",
+        "avg_duration": "Avg Duration (s)",
+        "avg_players_involved": "Avg Players Involved",
+        "build_ups_per_game": "Build-Ups per Game",
+        "prop_channel_center": "Central Channel (%)",
+        "prop_channel_half_space_left": "Left Half-Space (%)",
+        "prop_channel_wide_left": "Left Wide (%)",
+        "prop_channel_half_space_right": "Right Half-Space (%)",
+        "prop_channel_wide_right": "Right Wide (%)",
+        "build_up_carries": "Build-Up Carries (#)",
+    }
+
     tools = [
         {
             "type": "function",
@@ -798,6 +822,11 @@ class TeamChat(Chat):
         "opp_shot_probability_within_7s_after_turnover",
     ]
 
+    def _get_display_names(self, metrics):
+        return {
+            m: self.DISPLAY_NAMES.get(m, m)
+            for m in metrics
+        }
 
     def __init__(self, chat_state_hash, team, teams, state="empty"):
         self.teams = teams
@@ -992,18 +1021,6 @@ class TeamChat(Chat):
         return intro + "\n\n" + "\n\n".join(sections)
 
     def _summarise_style(self, teams_list):
-        display_names = {
-            "avg_passes": "Avg Passes",
-            "avg_duration": "Avg Duration (s)",
-            "build_ups_per_game": "Build-Ups / Game",
-            "build_up_carries": "Build-Up Carries",
-            "buildup_to_direct_pct": "Direct Passes %",
-            "prop_channel_center": "Central (%)",
-            "prop_channel_half_space_left": "Left Half-Space (%)",
-            "prop_channel_wide_left": "Left Wide (%)",
-            "prop_channel_half_space_right": "Right Half-Space (%)",
-            "prop_channel_wide_right": "Right Wide (%)",
-        }
 
         plot = self._build_plot(
             teams_list=teams_list,
@@ -1014,7 +1031,7 @@ class TeamChat(Chat):
                 else f"{teams_list[0].name} – Build-Up Style"
             ),
             subtitle="How teams build up play (z-scores)",
-            display_names=display_names,
+            display_names = self._get_display_names(self.STYLE_METRICS),
             labels=["Less", "Average", "More"],
         )
 
@@ -1030,16 +1047,9 @@ class TeamChat(Chat):
         return plot, text
 
     def _summarise_lanes(self, teams_list):
-        display_names = {
-            "prop_channel_center": "Central (%)",
-            "prop_channel_half_space_left": "Left Half-Space (%)",
-            "prop_channel_wide_left": "Left Wide (%)",
-            "prop_channel_half_space_right": "Right Half-Space (%)",
-            "prop_channel_wide_right": "Right Wide (%)",
-        }
 
         # Build lane heatmap
-        plot = LaneHeatmap(columns=self.LANE_METRICS, display_names=display_names)
+        plot = LaneHeatmap(columns=self.LANE_METRICS, display_names = self._get_display_names(self.LANE_METRICS))
 
         # Add each team as a row
         for team in teams_list:
@@ -1064,14 +1074,6 @@ class TeamChat(Chat):
         return plot, text
 
     def _summarise_performance(self, teams_list):
-        display_names = {
-            "progression_to_midfield_pct": "Progression to Midfield (%)",
-            "buildup_that_ends_with_finish_pct": "Buildup Ending in Finish (%)",
-            "turnover_pct_buildup": "Turnover (%)",
-            "opp_box_entries_within_7s_after_turnover": "Opp Box Entries After Turnover",
-            "opp_shot_probability_within_7s_after_turnover": "Opp Shot Probability After Turnover",
-            "first_line_break_pct_buildup": "First Line Break (%)",
-        }
 
         plot = self._build_plot(
             teams_list=teams_list,
@@ -1082,7 +1084,7 @@ class TeamChat(Chat):
                 else f"{teams_list[0].name} – Build-Up Performance"
             ),
             subtitle="Effectiveness and outcomes of build-up (z-scores)",
-            display_names=display_names,
+            display_names = self._get_display_names(self.PERFORMANCE_METRICS),
             labels=["Worse", "Average", "Better"],
         )
 
