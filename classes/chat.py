@@ -796,10 +796,26 @@ class TeamChat(Chat):
         "opp_shot_probability_within_7s_after_turnover",
     ]
 
+
     def __init__(self, chat_state_hash, team, teams, state="empty"):
         self.teams = teams
+
+        # session state for teams
+        if "selected_team_name" not in st.session_state:
+            st.session_state["selected_team_name"] = None
+
+        if "comparison_teams" not in st.session_state:
+            st.session_state["comparison_teams"] = []
+
+        # load selected team if exists
         self.selected_team = None
+        if st.session_state["selected_team_name"]:
+            self.selected_team = self.teams.to_data_point_by_team(
+                st.session_state["selected_team_name"]
+            )
+
         super().__init__(chat_state_hash, state=state)
+        
 
     def get_input(self):
         if x := st.chat_input("Ask about a team..."):
@@ -1075,19 +1091,45 @@ class TeamChat(Chat):
             )
 
         return plot, text
-
+    
+    # ---------------- _run_tool ----------------
     def _run_tool(self, function_name, arguments):
         if function_name in ["summarise_style", "summarise_performance", "summarise_lanes"]:
             team_names = self._resolve_team_names([arguments.get("team_name")])
         else:
             team_names = self._resolve_team_names(arguments.get("team_names", []))
 
+        # 🔥 PATCH 1: FIX STATE LOGIC
+        if team_names:
+
+            # CASE 1: single team → becomes main team
+            if len(team_names) == 1:
+                st.session_state["selected_team_name"] = team_names[0]
+                st.session_state["comparison_teams"] = [team_names[0]]
+
+            # CASE 2: multiple teams → keep main, add others
+            else:
+                main = st.session_state["selected_team_name"]
+
+                if main is None:
+                    main = team_names[0]
+                    st.session_state["selected_team_name"] = main
+
+                others = [t for t in team_names if t != main]
+                st.session_state["comparison_teams"] = [main] + others
+
+            # update runtime selected team
+            self.selected_team = self.teams.to_data_point_by_team(
+                st.session_state["selected_team_name"]
+            )
+
         if not team_names:
             return None, "I could not identify the team. Please write the team name again."
 
+        # 🔥 PATCH 2: ALWAYS USE STORED COMPARISON TEAMS
         teams_list = [
             self.teams.to_data_point_by_team(team_name)
-            for team_name in team_names
+            for team_name in st.session_state["comparison_teams"]
         ]
 
         if function_name == "summarise_style":
@@ -1133,8 +1175,48 @@ class TeamChat(Chat):
             None,
         )
 
-        if function_call is None:
+        # 🔥 FORCE INTENT FROM USER TEXT
+        query = input.lower()
+
+        forced_function = None
+
+        if "style" in query:
+            forced_function = "compare_style" if len(st.session_state["comparison_teams"]) > 1 else "summarise_style"
+
+        elif "performance" in query or "quality" in query:
+            forced_function = "compare_performance" if len(st.session_state["comparison_teams"]) > 1 else "summarise_performance"
+
+        elif "lane" in query or "channel" in query:
+            forced_function = "compare_lanes" if len(st.session_state["comparison_teams"]) > 1 else "summarise_lanes"
+
+        # ---------------- handle_input ----------------
+        if forced_function is not None:
+
+            # 🔥 ALWAYS extract teams from current input first
             teams_found = self._extract_teams(input)
+
+            if teams_found:
+                if len(teams_found) == 1:
+                    tool_args = {"team_name": teams_found[0]}
+                else:
+                    tool_args = {"team_names": teams_found}
+            else:
+                # fallback to stored context
+                if "compare" in forced_function:
+                    tool_args = {"team_names": st.session_state["comparison_teams"]}
+                else:
+                    tool_args = {"team_name": st.session_state["selected_team_name"]}
+
+            plot, tool_text = self._run_tool(forced_function, tool_args)
+
+        elif function_call is None:
+            
+            teams_found = self._extract_teams(input)
+
+            # 🔥 PATCH 3: FIX "their" BEHAVIOUR
+            if not teams_found:
+                if st.session_state["selected_team_name"]:
+                    teams_found = [st.session_state["selected_team_name"]]
 
             if not teams_found:
                 self.messages_to_display.append(
@@ -1153,9 +1235,35 @@ class TeamChat(Chat):
             )
 
             plot, tool_text = self._run_tool(fallback_name, fallback_args)
+
         else:
             tool_args = json.loads(function_call.arguments)
-            plot, tool_text = self._run_tool(function_call.name, tool_args)
+
+            # 🔥 PATCH 4: FORCE COMPARISON IF CONTEXT HAS MULTIPLE TEAMS
+            stored_teams = st.session_state.get("comparison_teams", [])
+
+            if (
+                function_call.name in ["summarise_style", "summarise_performance", "summarise_lanes"]
+                and len(stored_teams) > 1
+            ):
+                # upgrade to comparison automatically
+                if function_call.name == "summarise_style":
+                    function_name = "compare_style"
+                    tool_args = {"team_names": stored_teams}
+
+                elif function_call.name == "summarise_performance":
+                    function_name = "compare_performance"
+                    tool_args = {"team_names": stored_teams}
+
+                elif function_call.name == "summarise_lanes":
+                    function_name = "compare_lanes"
+                    tool_args = {"team_names": stored_teams}
+
+            else:
+                function_name = function_call.name
+
+            plot, tool_text = self._run_tool(function_name, tool_args)
+
 
         final = client.responses.create(
             model=GPT_CHAT_MODEL,
