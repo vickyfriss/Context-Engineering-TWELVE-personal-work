@@ -286,6 +286,23 @@ def compute_match_team_metrics(df, team, phase_data, sorted_indices, pos_lookup)
     for channel_name, count in channel_counts.items():
         channel_dict[f"channel_{channel_name}"] = count
 
+    # Build-up carries using the same conditions as desc_stats.py
+    if "carry" in pp_bu.columns:
+        x_delta = pp_bu["x_end"].astype(float) - pp_bu["x_start"].astype(float)
+
+        build_up_carries = pp_bu[
+            pp_bu["carry"].eq(True)
+            & pp_bu["player_position"].ne("GK")
+            & pp_bu["x_start"].notna()
+            & pp_bu["x_end"].notna()
+            & (x_delta >= 5.0)
+            & pp_bu["separation_start"].notna()
+            & (pp_bu["separation_start"].astype(float) <= 10.0)
+        ]
+
+        n_build_up_carries = len(build_up_carries)
+    else:
+        n_build_up_carries = 0
     return {
         "n_phases": n_phases,
         "n_turnovers": n_turnovers,
@@ -301,6 +318,7 @@ def compute_match_team_metrics(df, team, phase_data, sorted_indices, pos_lookup)
         "sum_duration": sum_duration,
         "sum_players": sum_players,
         "sum_gk": sum_gk,
+        "build_up_carries": n_build_up_carries,
         **channel_dict,
     }
 
@@ -373,6 +391,7 @@ def main():
             "avg_duration": round(totals["sum_duration"] / n_phases, 2) if n_phases > 0 else 0,
             "avg_players_involved": round(totals["sum_players"] / n_phases, 2) if n_phases > 0 else 0,
             "build_ups_per_game": round(n_phases / n_matches, 2) if n_matches > 0 else 0,
+            "build_up_carries": int(totals["build_up_carries"]),
         }
 
         # Add channel proportions dynamically
