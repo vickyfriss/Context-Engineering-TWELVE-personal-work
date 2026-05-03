@@ -83,7 +83,7 @@ negative_metrics = [
 # -------------------------------
 # Load dataset
 # -------------------------------
-teams = TeamStats(data_folder="data/team_build_up_analyst")
+teams = TeamStats(data_folder="data/team_build_up_analyst", file_pattern="buildup_metrics.csv")
 
 teams.calculate_statistics(
     metrics=metrics,

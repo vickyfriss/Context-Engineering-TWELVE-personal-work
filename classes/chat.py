@@ -833,6 +833,10 @@ class TeamChat(Chat):
     def _build_plot(self, teams_list, metrics, title, subtitle, display_names=None, labels=None):
         df_clean = self._safe_df(metrics)
 
+        dropped = len(self.teams.df) - len(df_clean)
+        if dropped > 0:
+            st.caption(f"ℹ️ {dropped} team(s) excluded from plot due to missing data in selected metrics.")
+
         plot = DistributionPlot(
             columns=metrics[::-1],
             labels=labels or ["Worse", "Average", "Better"],
@@ -843,20 +847,21 @@ class TeamChat(Chat):
         plot.add_title(title=title, subtitle=subtitle)
 
         original_df = self.teams.df
-        self.teams.df = df_clean
+        try:
+            self.teams.df = df_clean
 
-        plot.add_players(self.teams, metrics=metrics)
+            plot.add_players(self.teams, metrics=metrics)
 
-        for i, team in enumerate(teams_list):
-            if i == 0:
-                plot.add_player(team, len(df_clean), metrics=metrics)
-            else:
-                original_annotation = plot.annotation_text
-                plot.annotation_text = ""
-                plot.add_player(team, len(df_clean), metrics=metrics)
-                plot.annotation_text = original_annotation
-
-        self.teams.df = original_df
+            for i, team in enumerate(teams_list):
+                if i == 0:
+                    plot.add_player(team, len(df_clean), metrics=metrics)
+                else:
+                    original_annotation = plot.annotation_text
+                    plot.annotation_text = ""
+                    plot.add_player(team, len(df_clean), metrics=metrics)
+                    plot.annotation_text = original_annotation
+        finally:
+            self.teams.df = original_df
 
         return plot
 
@@ -898,7 +903,7 @@ class TeamChat(Chat):
                 sections.append(f"No valid comparison for {other_team.name}.")
                 continue
 
-            sentences = []
+            parts = []
 
             for diff in diffs:
                 metric_name = description_obj.write_out_team_metric(diff["metric"])
@@ -912,11 +917,11 @@ class TeamChat(Chat):
                     lower = reference_team.name
 
                 size = self._describe_difference_size(delta)
-                sentences.append(f"{higher} are {size} than {lower} in {metric_name}")
+                parts.append(f"{higher} are {size} than {lower} in {metric_name}")
 
             sections.append(
                 f"Compared with {other_team.name}: "
-                + "; ".join(sentences)
+                + "; ".join(parts)
                 + "."
             )
 
