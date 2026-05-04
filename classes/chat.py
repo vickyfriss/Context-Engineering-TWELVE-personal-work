@@ -1066,13 +1066,25 @@ class TeamChat(Chat):
 
     def _stop_opponent(self, teams_list):
         team = teams_list[0]
+
+        plot = self._build_plot(
+            teams_list=[team],
+            metrics=["buildup_to_direct_pct"],
+            title=f"{team.name} – Direct vs Short Build-Up",
+            subtitle="How direct is their build-up style? (z-scores)",
+            display_names={"buildup_to_direct_pct": "Direct Passes %"},
+            labels=["More Short", "Medium", "More Direct"],
+        )
+        plot.fig.update_layout(height=280)
+        plot._display_height = 280
+
         try:
             player_df = pd.read_csv(_PLAYER_STATS_PATH, encoding="utf-8-sig")
         except Exception:
             player_df = pd.read_csv(_PLAYER_STATS_PATH)
 
         text = OpponentTeamDescription(team, player_df).stream_gpt()
-        return None, text
+        return plot, text
 
     def _summarise_lanes(self, teams_list):
 

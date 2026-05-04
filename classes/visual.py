@@ -60,6 +60,7 @@ class Visual:
     def __init__(self, pdf: bool = False, plot_type: str = "scout"):
         self.pdf = pdf
         self.font_size_multiplier = 1.4 if pdf else 1.0
+        self._display_height: int = 500
 
         self.fig = go.Figure()
         self._setup_styles()
@@ -146,7 +147,7 @@ class Visual:
         st.plotly_chart(
             self.fig,
             config={"displayModeBar": False},
-            height=500,
+            height=getattr(self, "_display_height", 500),
             width="content",
             key=f"plotly_{id(self)}"
         )
