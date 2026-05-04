@@ -47,11 +47,11 @@ metrics = [
     "build_ups_per_game",
     "build_up_carries",
     "buildup_to_direct_pct",
-    #"prop_channel_center",
-    #"prop_channel_half_space_left",
-    #prop_channel_wide_left",
-    #"prop_channel_half_space_right",
-    #"prop_channel_wide_right",
+    "prop_channel_center",
+    "prop_channel_half_space_left",
+    "prop_channel_wide_left",
+    "prop_channel_half_space_right",
+    "prop_channel_wide_right",
 ]
 
 style_metrics = [
@@ -126,7 +126,7 @@ if chat.state == "empty":
         (
             "Which team would you like to analyse today?\n\n"
             f"You can type any team name (for example: {examples}). "
-            "Once selected, I can break down their build-up style, performance, strengths, "
+            "Once selected, I can break down their build-up style, performance, strengths, channels used, "
             "and compare them to other teams."
         ),
         role="assistant",
