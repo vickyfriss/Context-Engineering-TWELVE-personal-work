@@ -811,6 +811,13 @@ class TeamDescription(Description):
 
 
 
+def _metric_label(metric: str) -> str:
+    return {
+        "buildup_to_direct_pct": "direct passes %",
+        "build_up_carries":      "build-up carries under pressure",
+    }.get(metric, metric.replace("_", " "))
+
+
 class TeamStyleDescription(Description):
     output_token_limit = 180
 
@@ -913,8 +920,8 @@ class TeamStyleDescription(Description):
 
     def get_prompt_messages(self) -> List[Dict[str, str]]:
         prompt = (
-            "Please use the statistical description enclosed with ``` to give a concise, 3 sentence summary of the team's build-up style. The first sentence should use varied language to give an overview of the team." 
-            "The second sentence should describe the team's most distinctive style baseed on the build-up metrics." 
+            "Please use the statistical description enclosed with ``` to give a concise, 3 sentence summary of the team's build-up style. The first sentence should use varied language to give an overview of the team."
+            "The second sentence should describe the team's most distinctive style baseed on the build-up metrics."
             "Finally, summarise exactly how the team's build-up style compares to other teams based on the build-up metrics."
             "Use only the information given in the description to answer, do not make assumptions or add any information. Use only the metrics I gave you and no others. "
             #"Sentence 1: overall performance in the build-up quality performance-metrics. "
@@ -1013,5 +1020,86 @@ class TeamLaneDescription(Description):
         prompt = (
             "Please use the statistical description enclosed with ``` to give a concise, 2-3 sentence summary of the team's lane/channel usage. "
             "Focus on which lanes are used relatively more or less and how this compares to other teams."
+        )
+        return [{"role": "user", "content": prompt}]
+
+
+class OpponentTeamDescription(Description):
+    """Scouting report combining team z-scores with top player data per metric."""
+
+    output_token_limit = 200
+
+    @property
+    def gpt_examples_path(self):
+        return f"{self.gpt_examples_base}/stop_opponent.xlsx"
+
+    @property
+    def describe_paths(self):
+        return []
+
+    def __init__(self, team: Team, player_df: pd.DataFrame):
+        self.team = team
+        self.player_df = player_df
+        super().__init__()
+
+    def get_intro_messages(self) -> List[Dict[str, str]]:
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "You are a football analyst providing tactical advice to a coach. "
+                    "Use only the data provided in the scouting report. "
+                    "Give concrete, actionable defensive advice based on the statistics."
+                ),
+            }
+        ]
+
+    def _describe_level(self, value: float) -> str:
+        thresholds = [1.5, 0.5, -0.5, -1.5]
+        words = ["very high", "high", "average", "low", "very low"]
+        return sentences.describe(thresholds, words, value)
+
+    def _top_player(self, col: str):
+        team_df = self.player_df[self.player_df["Team Name"] == self.team.name]
+        if team_df.empty or col not in team_df.columns:
+            return "unknown", 0
+        row = team_df.nlargest(1, col).iloc[0]
+        return row["Player Name"], int(row[col])
+
+    def synthesize_text(self) -> str:
+        team = self.team
+        desc = f"Here is a scouting report for {team.name}'s build-up style.\n\n"
+
+        for metric in ["buildup_to_direct_pct", "build_up_carries"]:
+            z_key = metric + "_Z"
+            if z_key in team.ser_metrics.index:
+                z = team.ser_metrics[z_key]
+                desc += (
+                    f"{team.name} was {self._describe_level(z)} in "
+                    f"{_metric_label(metric)} compared to other teams. "
+                )
+
+        desc += "\n\nKey players:\n"
+        for col, label in [
+            ("short_pass", "Short progressive passes (short_pass)"),
+            ("carry",      "Carries (carry)"),
+            ("long_pass",  "Direct long passes (long_pass)"),
+            ("long_rec",   "Long pass reception (long_rec)"),
+        ]:
+            name, val = self._top_player(col)
+            desc += f"- {label}: {name} ({val})\n"
+
+        return desc
+
+    def get_prompt_messages(self) -> List[Dict[str, str]]:
+        prompt = (
+            "Use the scouting report enclosed in ``` to give a 4-sentence tactical analysis. "
+            "Sentence 1: describe the team's direct passing tendency and give advice how to defend against it."
+            "Sentence 2: describe their tendency to use carries and what it means defensively. "
+            "Sentence 3: name the top player for short pass progression (short_pass) and for carries (carry), "
+            "and give concrete advice on how to defend against them. "
+            "Sentence 4: name the top player for direct passes (long_pass) and long pass reception (long_rec), "
+            "and give concrete advice on how to defend against their long ball play. "
+            "Use only the information given. Be concrete and actionable."
         )
         return [{"role": "user", "content": prompt}]
