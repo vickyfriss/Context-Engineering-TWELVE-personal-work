@@ -937,7 +937,7 @@ class TeamLaneDescription(Description):
 
     @property
     def gpt_examples_path(self):
-        return f"{self.gpt_examples_base}/team_buildup_style.xlsx"
+        return f"{self.gpt_examples_base}/lanes.xlsx"
 
     @property
     def describe_paths(self):
@@ -1005,6 +1005,24 @@ class TeamLaneDescription(Description):
         metric_groups = {"lanes": [m for m in metrics if m in lane_metrics]}
 
         for group_name, group_metrics in metric_groups.items():
+            center = team.ser_metrics.get("prop_channel_center", 0.0)
+            left = team.ser_metrics.get("prop_channel_half_space_left", 0.0) + team.ser_metrics.get("prop_channel_wide_left", 0.0)
+            right = team.ser_metrics.get("prop_channel_half_space_right", 0.0) + team.ser_metrics.get("prop_channel_wide_right", 0.0)
+            wide = team.ser_metrics.get("prop_channel_wide_left", 0.0) + team.ser_metrics.get("prop_channel_wide_right", 0.0)
+            half_space = team.ser_metrics.get("prop_channel_half_space_left", 0.0) + team.ser_metrics.get("prop_channel_half_space_right", 0.0)
+            
+            if center > left and center > right:
+                description += f"{team.name} primarily uses the central channel in build-up. "
+            elif left > right:
+                description += f"{team.name} primarily uses the left channels in build-up. "
+            else:
+                description += f"{team.name} primarily uses the right channels in build-up. "
+            
+            if wide > half_space:
+                description += f"{team.name} has a preference for wide channels in build-up. "
+            else:
+                description += f"{team.name} has a preference for half-space channels in build-up. "
+
             for metric in group_metrics:
                 z_key = metric + "_Z"
                 z_value = team.ser_metrics.get(z_key, team.ser_metrics.get(metric, 0.0))
@@ -1014,12 +1032,27 @@ class TeamLaneDescription(Description):
                 description += " in " + self.write_out_team_metric(metric)
                 description += " compared to other teams. "
 
+        #print (description)
         return description
 
     def get_prompt_messages(self) -> List[Dict[str, str]]:
         prompt = (
-            "Please use the statistical description enclosed with ``` to give a concise, 2-3 sentence summary of the team's lane/channel usage. "
-            "Focus on which lanes are used relatively more or less and how this compares to other teams."
+            "Please use the statistical description enclosed with ``` to produce a concise summary of the team's lane usage in build-up.\n"
+            
+            "Structure:\n"
+            "Sentence 1: describe the main direction (left/center/right).\n"
+            "Sentence 2: describe preference for wide vs half-space.\n"
+            "Sentence 3 (optional): mention specific lanes ONLY if their usage is 'very high' or 'very low'.\n"
+            
+            "Strict rules:\n"
+            "- Only include Sentence 3 if at least one lane is 'very high' or 'very low'.\n"
+            "- In Sentence 3, ONLY mention lanes that are 'very high' or 'very low'.\n"
+            "- NEVER mention lanes that are described as high, low, or average.\n"
+            "- Do NOT compare to other teams.\n"
+            "- Keep the text short and clean.\n"
+            
+            "Final check:\n"
+            "- If no lane is 'very high' or 'very low', output ONLY two sentences.\n"
         )
         return [{"role": "user", "content": prompt}]
 
