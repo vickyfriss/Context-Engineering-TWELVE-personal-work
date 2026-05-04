@@ -635,6 +635,10 @@ class LaneHeatmap(Visual):
             "prop_channel_wide_right",
         ]
 
+    def show(self):
+        """Render matplotlib lane heatmap in Streamlit."""
+        st.pyplot(self.fig, clear_figure=False)
+
     def add_team(self, team):
 
         cols = self._ordered_columns()
@@ -644,8 +648,6 @@ class LaneHeatmap(Visual):
             for c in cols
         ])
 
-        norm = (values - values.min()) / (values.max() - values.min() + 1e-6)
-
         pitch = VerticalPitch(
             pitch_type="statsbomb",
             pitch_color="white",
@@ -653,31 +655,18 @@ class LaneHeatmap(Visual):
             linewidth=3
         )
 
-        fig, ax = pitch.draw()
+        fig, ax = pitch.draw(figsize=(7, 3))
 
-        # -----------------------------
-        # CLEAN ALL MATPLOTLIB GARBAGE
-        # -----------------------------
-        ax.set_axis_off()
-        ax.set_frame_on(False)
-        ax.set_xticks([])
-        ax.set_yticks([])
+        # Show only the selected upper pitch zone
+        ax.set_xlim(0, 80)
+        ax.set_ylim(80, 120)
 
-        for spine in ax.spines.values():
-            spine.set_visible(False)
-
-        # 🔥 THIS IS THE IMPORTANT FIX (removes child14/child18 etc.)
-        for a in fig.get_axes():
-            if a is not ax:
-                fig.delaxes(a)
-
-        # -----------------------------
-        # PITCH LAYOUT
-        # -----------------------------
-        ax.set_ylim(120, 80)
+        # Remove all axes/margins/frames
+        ax.axis("off")
+        ax.set_position([0, 0, 1, 1])
+        fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
 
         x_edges = np.linspace(0, 80, len(cols) + 1)
-        cmap = plt.cm.Greens
 
         y_bottom, y_top = 80, 120
 
@@ -685,12 +674,17 @@ class LaneHeatmap(Visual):
 
             x1, x2 = x_edges[i], x_edges[i + 1]
 
-            intensity = np.clip(norm[i], 0, 1)
-            color = cmap(0.2 + 0.8 * intensity)
+            # Keep pitch visible by not overlaying lane-wide fills.
 
-            ax.fill_between([x1, x2], y_bottom, y_top, color=color, alpha=0.95, zorder=1)
-
-            ax.plot([x1, x1], [80, 120], color="grey", linewidth=2, zorder=2)
+            # Internal separators only; avoid drawing an extra line on the far right
+            if i > 0:
+                ax.plot(
+                    [x1, x1],
+                    [y_bottom, y_top],
+                    color="grey",
+                    linewidth=2,
+                    zorder=2
+                )
 
             x = (x1 + x2) / 2
 
@@ -702,10 +696,11 @@ class LaneHeatmap(Visual):
                 label,
                 ha="center",
                 va="center",
-                fontsize=11,
+                fontsize=7,
                 fontweight="bold",
                 color="black",
-                zorder=3
+                zorder=3,
+                clip_on=True
             )
 
             txt = ax.text(
@@ -713,10 +708,11 @@ class LaneHeatmap(Visual):
                 value,
                 ha="center",
                 va="center",
-                fontsize=18,
+                fontsize=9,
                 fontweight="bold",
                 color="black",
-                zorder=3
+                zorder=3,
+                clip_on=True
             )
 
             txt.set_path_effects([
@@ -724,7 +720,11 @@ class LaneHeatmap(Visual):
                 path_effects.Normal()
             ])
 
-        # prevent Streamlit / matplotlib leaks
+        # Hard crop to the visible plot area
+        ax.set_xlim(0, 80)
+        ax.set_ylim(80, 120)
+        ax.axis("off")
+
         plt.close(fig)
 
         self.fig = fig

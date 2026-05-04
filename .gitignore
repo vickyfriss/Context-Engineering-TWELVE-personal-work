@@ -29,4 +29,7 @@ data/dynamic_events_pl_24/
 venv/
 user_info.json
 clustering.ipynb
+player_pass_rec_stats.csv
+player_pass_rec_stats.xlsx
+team_buildup_stats.csv
 

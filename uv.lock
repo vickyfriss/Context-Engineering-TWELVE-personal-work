@@ -1086,6 +1086,24 @@ wheels = [
 ]
 
 [[package]]
+name = "mplsoccer"
+version = "1.6.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "pillow" },
+    { name = "requests" },
+    { name = "scipy" },
+    { name = "seaborn" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2e/df/e810b16644a51d3055a0c0942d7f267fc08ae3d313545dcd4ad423ed61b9/mplsoccer-1.6.1.tar.gz", hash = "sha256:021d5369049d3f3f2aecade7b3a94240e0c2b5458835bdca09421a01ad9d0f15", size = 832792, upload-time = "2025-11-01T07:27:06.941Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6e/63/8dd3cdf8acac342d5011900c10d2a8238d648b796e0ab45c6603668d1741/mplsoccer-1.6.1-py3-none-any.whl", hash = "sha256:a8311a32290804b5d8d8aa4c117b2ec8d2444cbf72cb06ec40120072ee2da6dd", size = 88512, upload-time = "2025-11-01T07:27:08.247Z" },
+]
+
+[[package]]
 name = "narwhals"
 version = "2.18.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1992,6 +2010,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "google-generativeai" },
     { name = "matplotlib" },
+    { name = "mplsoccer" },
     { name = "numpy" },
     { name = "openai" },
     { name = "openpyxl" },
@@ -2013,6 +2032,7 @@ requires-dist = [
     { name = "fastapi", specifier = "==0.104.1" },
     { name = "google-generativeai", specifier = "==0.7.2" },
     { name = "matplotlib", specifier = ">=3.10.8" },
+    { name = "mplsoccer", specifier = ">=1.6.1" },
     { name = "numpy", specifier = "==1.26.3" },
     { name = "openai", extras = ["embeddings"], specifier = "==2.15.0" },
     { name = "openpyxl", specifier = ">=3.1.5" },

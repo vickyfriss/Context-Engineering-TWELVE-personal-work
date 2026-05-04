@@ -702,11 +702,11 @@ class TeamChat(Chat):
         "avg_duration": "Avg Duration (s)",
         "avg_players_involved": "Avg Players Involved",
         "build_ups_per_game": "Build-Ups per Game",
-        "prop_channel_center": "Central Channel (%)",
-        "prop_channel_half_space_left": "Left Half-Space (%)",
-        "prop_channel_wide_left": "Left Wide (%)",
-        "prop_channel_half_space_right": "Right Half-Space (%)",
-        "prop_channel_wide_right": "Right Wide (%)",
+        "prop_channel_center": "Central",
+        "prop_channel_half_space_left": "Left Half",
+        "prop_channel_wide_left": "Left Wide",
+        "prop_channel_half_space_right": "Right Half",
+        "prop_channel_wide_right": "Right Wide",
         "build_up_carries": "Build-Up Carries (#)",
     }
 
