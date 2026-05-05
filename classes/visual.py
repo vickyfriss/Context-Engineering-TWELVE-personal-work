@@ -628,11 +628,11 @@ class LaneHeatmap(Visual):
 
     def _ordered_columns(self):
         return [
-            "prop_channel_wide_left",
-            "prop_channel_half_space_left",
-            "prop_channel_center",
-            "prop_channel_half_space_right",
             "prop_channel_wide_right",
+            "prop_channel_half_space_right",
+            "prop_channel_center",
+            "prop_channel_half_space_left",
+            "prop_channel_wide_left",
         ]
 
     def show(self):

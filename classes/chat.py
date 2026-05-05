@@ -1054,7 +1054,7 @@ class TeamChat(Chat):
         )
 
         if len(teams_list) == 1:
-            text = TeamStyleDescription(teams_list[0]).synthesize_text()
+            text = TeamStyleDescription(teams_list[0]).stream_gpt()
         else:
             text = self._compare_from_metrics(
                 teams_list=teams_list,
@@ -1102,7 +1102,7 @@ class TeamChat(Chat):
             pass
 
         if len(teams_list) == 1:
-            text = TeamLaneDescription(teams_list[0]).synthesize_text()
+            text = TeamLaneDescription(teams_list[0]).stream_gpt()
         else:
             # Reuse comparison helper but with lane metrics
             text = self._compare_from_metrics(
@@ -1129,7 +1129,7 @@ class TeamChat(Chat):
         )
 
         if len(teams_list) == 1:
-            text = TeamDescription(teams_list[0]).synthesize_text()
+            text = TeamDescription(teams_list[0]).stream_gpt()
         else:
             text = self._compare_from_metrics(
                 teams_list=teams_list,
